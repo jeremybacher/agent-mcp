@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ARCA Agent - Monitor</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #1e1e2e;
+        color: #cdd6f4;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 0;
+        padding: 20px;
+      }
+
+      h1 {
+        margin-bottom: 5px;
+        color: #89b4fa;
+      }
+
+      h2 {
+        margin-top: 32px;
+        margin-bottom: 8px;
+        color: #89b4fa;
+      }
+
+      pre {
+        width: 500px;
+        background-color: #313244;
+        padding: 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        overflow-x: auto;
+        margin: 0;
+      }
+
+      table {
+        width: 700px;
+        max-width: 95vw;
+        border-collapse: collapse;
+        background-color: #313244;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      th,
+      td {
+        padding: 8px 12px;
+        text-align: left;
+        border-bottom: 1px solid #45475a;
+        font-size: 0.9em;
+      }
+
+      th {
+        background-color: #45475a;
+        color: #89b4fa;
+      }
+
+      tr:last-child td {
+        border-bottom: none;
+      }
+
+      td.vacio {
+        text-align: center;
+        color: #a6adc8;
+      }
+
+      button.ver {
+        background-color: #45475a;
+        color: #89b4fa;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 0.85em;
+        cursor: pointer;
+      }
+
+      button.ver:hover {
+        background-color: #585b70;
+      }
+
+      dialog#json-dialog {
+        width: 500px;
+        max-width: 90vw;
+        max-height: 80vh;
+        background-color: #1e1e2e;
+        color: #cdd6f4;
+        border: none;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+      }
+
+      dialog#json-dialog::backdrop {
+        background-color: rgba(0, 0, 0, 0.5);
+      }
+
+      dialog#json-dialog h2 {
+        margin-top: 0;
+      }
+
+      dialog#json-dialog pre {
+        width: auto;
+        max-height: 55vh;
+        overflow-y: auto;
+      }
+
+      dialog#json-dialog .cerrar {
+        margin-top: 12px;
+        background-color: #89b4fa;
+        color: #1e1e2e;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 0.9em;
+        cursor: pointer;
+        font-weight: bold;
+      }
+
+      dialog#json-dialog .cerrar:hover {
+        background-color: #74a8f7;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h1>Monitor ARCA Agent</h1>
+    <div style="font-size: 0.9em; margin-bottom: 12px; color: #a6adc8">
+      Actualización en tiempo real vía HTTP Polling (1s)
+    </div>
+
+    <h2>Historial de consultas (SQLite)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>CUIT</th>
+          <th>Razón social</th>
+          <th>Estado</th>
+          <th>Fecha</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="historial">
+        <tr>
+          <td class="vacio" colspan="5">Sin consultas todavía...</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <dialog id="json-dialog">
+      <h2>Detalle de la consulta</h2>
+      <pre id="json-dialog-contenido"></pre>
+      <button class="cerrar" id="json-dialog-cerrar">Cerrar</button>
+    </dialog>
+
+    <script>
+      let consultasActuales = [];
+
+      function abrirDialogoJson(indice) {
+        const consulta = consultasActuales[indice];
+        if (!consulta) return;
+        document.getElementById("json-dialog-contenido").textContent = JSON.stringify(
+          consulta.resultado ?? consulta,
+          null,
+          2,
+        );
+        document.getElementById("json-dialog").showModal();
+      }
+
+      async function actualizarHistorial() {
+        try {
+          const res = await fetch("/historial?t=" + Date.now(), { cache: "no-store" });
+          if (!res.ok) return;
+          const data = await res.json();
+          const cuerpo = document.getElementById("historial");
+          const consultas = data.consultas || [];
+          consultasActuales = consultas;
+
+          if (consultas.length === 0) {
+            cuerpo.innerHTML =
+              '<tr><td class="vacio" colspan="5">Sin consultas todavía...</td></tr>';
+            return;
+          }
+
+          cuerpo.innerHTML = consultas
+            .map((c, indice) => {
+              const fecha = new Date(c.fecha).toLocaleString();
+              return `<tr>
+                        <td>${c.cuit ?? ""}</td>
+                        <td>${c.razon_social ?? ""}</td>
+                        <td>${c.estado ?? ""}</td>
+                        <td>${fecha}</td>
+                        <td><button class="ver" onclick="abrirDialogoJson(${indice})">Ver</button></td>
+                    </tr>`;
+            })
+            .join("");
+        } catch (err) {
+          // Servidor cargando
+        }
+      }
+
+      document.getElementById("json-dialog-cerrar").addEventListener("click", () => {
+        document.getElementById("json-dialog").close();
+      });
+
+      setInterval(actualizarHistorial, 1000);
+      actualizarHistorial();
+    </script>
+  </body>
+</html>

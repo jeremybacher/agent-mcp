@@ -1,0 +1,7 @@
+mcp
+flask
+zeep
+python-dotenv
+pytest
+google-genai
+pyyaml

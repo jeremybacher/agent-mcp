@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "arca-agent": {
+      "command": "venv/bin/python3",
+      "args": ["server.py"]
+    }
+  }
+}
