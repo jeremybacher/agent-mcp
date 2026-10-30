@@ -158,6 +158,14 @@ def test_el_cliente_reintenta_ante_picos_de_demanda_y_cuota():
     assert reintentos.max_delay >= reintentos.initial_delay
 
 
+def test_un_pedido_colgado_se_corta_en_lugar_de_bloquear_la_ui_para_siempre():
+    # Arrange / Act
+    opciones = gemini._opciones_http()
+    # Assert: con timeout, el trabajo termina con error y libera el cupo de la UI.
+    assert opciones.timeout is not None
+    assert 0 < opciones.timeout <= 120_000
+
+
 def test_sin_api_key_ni_cliente_falla_con_mensaje_claro(monkeypatch):
     # Arrange
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)

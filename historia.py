@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 
 DIRECTORIO_ACTUAL = os.path.dirname(os.path.abspath(__file__))
@@ -102,3 +103,28 @@ def listar_ultimas(limite: int = 20) -> list[dict]:
         resultado.append(item)
 
     return resultado
+
+
+def contar() -> int:
+    """Cantidad de consultas guardadas."""
+    with closing(_conectar()) as conexion:
+        return conexion.execute("SELECT COUNT(*) FROM consultas").fetchone()[0]
+
+
+def eliminar_por_cuit(cuit: str) -> int:
+    """Borra todas las consultas guardadas de un CUIT. Devuelve cuántas filas eliminó."""
+    with closing(_conectar()) as conexion, conexion:
+        return conexion.execute("DELETE FROM consultas WHERE cuit = ?", (cuit,)).rowcount
+
+
+def eliminar_todo() -> int:
+    """Vacía el historial y compacta el archivo. Devuelve cuántas filas eliminó.
+
+    El `VACUUM` hace que los datos borrados no queden recuperables dentro del
+    archivo SQLite (sin él, las páginas liberadas conservan el contenido).
+    """
+    with closing(_conectar()) as conexion, conexion:
+        eliminadas = conexion.execute("DELETE FROM consultas").rowcount
+    with closing(_conectar()) as conexion:
+        conexion.execute("VACUUM")
+    return eliminadas

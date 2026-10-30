@@ -1,16 +1,45 @@
-"""Entradas y salidas del CLI con sus controles de seguridad."""
+"""Entradas y salidas del CLI y de la UI, con sus controles de seguridad."""
 
 import csv
 import os
+import re
 
 import validacion
 
 MAX_FILAS_CSV = 200
 MAX_BYTES_CSV = 64 * 1024
+MAX_LARGO_TOKEN = 20
+_SEPARADORES = re.compile(r"[\s,;]+")
+_SOLO_NUMERICO = re.compile(r"^[\d-]*\d[\d-]*$")
 
 
 class EntradaInvalidaError(ValueError):
-    """El CSV o la ruta de salida no cumplen las reglas de seguridad."""
+    """El CSV, el texto o la ruta de salida no cumplen las reglas de seguridad."""
+
+
+def extraer_cuits(texto: str) -> tuple[list[str], list[str]]:
+    """Extrae los CUITs de un texto pegado (uno por línea, coma o CSV).
+
+    Solo se consideran los tokens formados por dígitos y guiones; el resto
+    (encabezados, nombres, notas) se ignora. Devuelve (válidos, inválidos),
+    normalizados, sin duplicados y en orden de aparición.
+    """
+    validos: list[str] = []
+    invalidos: list[str] = []
+    vistos: set[str] = set()
+    for token in _SEPARADORES.split(texto):
+        if not _SOLO_NUMERICO.match(token):
+            continue
+        cuit = validacion.normalizar_cuit(token)
+        if len(cuit) > MAX_LARGO_TOKEN:
+            raise EntradaInvalidaError("hay un número demasiado largo para ser un CUIT")
+        if cuit in vistos:
+            continue
+        vistos.add(cuit)
+        if len(vistos) > MAX_FILAS_CSV:
+            raise EntradaInvalidaError(f"hay más de {MAX_FILAS_CSV} CUITs")
+        (validos if validacion.validar_cuit(cuit) else invalidos).append(cuit)
+    return validos, invalidos
 
 
 def leer_csv_cuits(path: str) -> tuple[list[str], list[str]]:

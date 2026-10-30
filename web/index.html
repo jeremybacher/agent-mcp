@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARCA Agent</title>
+    <link rel="stylesheet" href="/static/estilos.css" />
+  </head>
+
+  <body>
+    <div class="app">
+      <header class="barra">
+        <div class="marca">
+          <h1>ARCA Agent</h1>
+          <span class="sub">Debida diligencia de proveedores</span>
+        </div>
+        <div class="barra-acciones">
+          <button type="button" id="abrir-ajustes" class="chip-boton" title="Ajustes del agente">
+            <span id="resumen-ajustes">temp 0</span>
+          </button>
+          <button type="button" id="abrir-historial" class="chip-boton" title="Consultas guardadas">
+            Historial <span id="contador-historial" class="insignia" hidden></span>
+          </button>
+          <button type="button" id="abrir-ayuda" class="chip-boton" title="Qué se puede hacer acá">
+            Ayuda
+          </button>
+          <button type="button" id="nueva" class="chip-boton">Nueva conversación</button>
+        </div>
+      </header>
+
+      <main id="hilo" class="hilo" role="log" aria-live="polite" aria-busy="false" tabindex="0">
+        <section id="bienvenida" class="bienvenida">
+          <h2>¿En qué te ayudo?</h2>
+          <p>
+            Verifico proveedores contra el Padrón de ARCA y respondo preguntas sobre los que
+            ya verificaste.
+          </p>
+          <div id="sugerencias" class="sugerencias"></div>
+          <button type="button" id="ver-funciones" class="enlace">Ver todo lo que puedo hacer</button>
+        </section>
+        <div id="mensajes" class="mensajes"></div>
+      </main>
+
+      <button type="button" id="bajar" class="bajar" hidden aria-label="Ir al último mensaje">
+        ↓
+      </button>
+
+      <footer class="compositor">
+        <form id="formulario">
+          <div id="modos" class="modos" role="group" aria-label="Qué querés hacer"></div>
+          <p id="aviso" class="aviso" hidden></p>
+          <div class="caja">
+            <label id="grupo-archivo" class="adjuntar" title="Cargar un .csv o .txt con CUITs">
+              Adjuntar
+              <input
+                type="file"
+                id="archivo"
+                class="oculto"
+                accept=".csv,.txt,text/csv,text/plain"
+              />
+            </label>
+            <textarea
+              id="entrada"
+              rows="1"
+              maxlength="20000"
+              spellcheck="false"
+              aria-label="Mensaje"
+            ></textarea>
+            <button type="submit" id="enviar" class="primario">Enviar</button>
+          </div>
+          <p class="ayuda-envio">Enter envía · Shift + Enter agrega una línea</p>
+        </form>
+      </footer>
+    </div>
+
+    <dialog id="ayuda" class="ancho">
+      <h2>Qué podés hacer acá</h2>
+      <div class="contenido-ayuda">
+        <section>
+          <h3>Conversar</h3>
+          <ul>
+            <li>
+              Escribí abajo y apretá <kbd>Enter</kbd> para enviar; <kbd>Shift</kbd> +
+              <kbd>Enter</kbd> agrega una línea. El campo crece mientras escribís.
+            </li>
+            <li>
+              Las respuestas llegan <strong>en vivo</strong>, mientras el modelo las escribe.
+              Hasta que aparece el primer texto ves «Pensando…».
+            </li>
+            <li>
+              Si subís en la conversación aparece un botón ↓ para volver al último mensaje;
+              si estás abajo, se desplaza sola.
+            </li>
+            <li>
+              Las sugerencias de la pantalla de inicio hacen la pregunta con un clic.
+            </li>
+            <li>
+              <strong>Nueva conversación</strong> la reinicia. No borra el historial guardado.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Modo «Preguntar» <span class="etiqueta-ayuda">no consulta ARCA</span></h3>
+          <ul>
+            <li>
+              Responde sobre los proveedores ya verificados: el historial guardado y el último
+              informe de la conversación.
+            </li>
+            <li>
+              Entiende repreguntas («¿y de esos, cuáles son personas físicas?»): recuerda los
+              últimos 6 intercambios.
+            </li>
+            <li>
+              Si pedís un dato que no se guarda (domicilio, DNI) o un CUIT que no verificaste,
+              lo dice en lugar de inventarlo.
+            </li>
+            <li>Cada pregunta puede tener hasta 500 caracteres.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Modo «Verificar CUITs» <span class="etiqueta-ayuda">consulta el Padrón de ARCA</span></h3>
+          <ul>
+            <li>
+              Pegá uno o más CUITs (uno por línea o separados por coma, con o sin guiones) o
+              usá <strong>Adjuntar</strong> para cargar un <code>.csv</code> / <code>.txt</code>
+              (hasta 64 KB y 200 CUITs).
+            </li>
+            <li>
+              Si lo que pegás son solo CUITs, el selector cambia solo a este modo y te avisa
+              antes de enviar. Después de enviar vuelve a «Preguntar».
+            </li>
+            <li>
+              Los CUITs con dígito verificador incorrecto se descartan antes de llamar a ARCA y
+              figuran en el informe como «CUIT inválido».
+            </li>
+            <li>
+              El resultado es un informe con tabla de proveedores, alertas y resumen. Cada
+              consulta exitosa se guarda en el historial.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>En cada respuesta</h3>
+          <ul>
+            <li>
+              Una <strong>pastilla por herramienta</strong> que usó el agente, con sus argumentos,
+              si terminó bien (✓) o falló (✗) y cuánto tardó.
+            </li>
+            <li>
+              Una línea chica con el modelo, la temperatura y la skill que se usaron.
+            </li>
+            <li>
+              Tablas, listas y negritas bien formateadas. El contenido se muestra siempre como
+              texto: nada de lo que devuelve el padrón se ejecuta.
+            </li>
+            <li>
+              Botones: <strong>Copiar</strong> (la respuesta en Markdown),
+              <strong>Descargar .md</strong> (en los informes de verificación) y
+              <strong>Reintentar</strong> (si la respuesta falló).
+            </li>
+            <li>
+              Si se corta la conexión con el servidor, lo avisa en unos segundos y la página
+              queda libre para seguir.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Ajustes <span class="etiqueta-ayuda">botón «temp»</span></h3>
+          <ul>
+            <li>
+              Cambiá la <strong>temperatura</strong> del modelo entre 0 (respuestas más
+              repetibles) y 2 (más variadas). Se recuerda en este navegador y se puede
+              restablecer.
+            </li>
+            <li>
+              Vale solo para tus consultas desde esta página: no modifica el
+              <code>.agent.md</code>.
+            </li>
+            <li>También ves el modelo, el máximo de tokens y de iteraciones, y las skills.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Historial y borrado <span class="etiqueta-ayuda">botón «Historial»</span></h3>
+          <ul>
+            <li>
+              Lista las consultas guardadas (las 50 más recientes, con el total). El número del
+              botón es la cantidad guardada.
+            </li>
+            <li>
+              Por cada CUIT: <strong>Ver</strong> el detalle, <strong>Preguntar</strong> sobre él
+              (prepara el mensaje) o <strong>Borrar</strong> todas sus consultas.
+            </li>
+            <li>
+              <strong>Borrar todo el historial</strong> lo vacía y compacta la base, así que lo
+              borrado tampoco queda dentro del archivo.
+            </li>
+            <li>
+              Siempre pide confirmación y no se puede deshacer. No se puede borrar mientras hay
+              una respuesta en curso.
+            </li>
+            <li>
+              Tras borrar, la conversación deja una nota y el agente deja de ver lo anterior.
+            </li>
+            <li>El agente no puede borrar datos: solo vos, desde acá.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h3>Límites y seguridad</h3>
+          <ul>
+            <li>Se procesa un pedido a la vez: mientras el agente responde, no se puede enviar otro.</li>
+            <li>
+              La página solo funciona en este equipo (127.0.0.1) y rechaza pedidos que vengan
+              de otras páginas.
+            </li>
+          </ul>
+        </section>
+      </div>
+      <div class="pie-dialogo">
+        <span></span>
+        <button type="button" id="ayuda-cerrar" class="primario">Cerrar</button>
+      </div>
+    </dialog>
+
+    <dialog id="ajustes">
+      <h2>Ajustes del agente</h2>
+      <p id="config" class="chips" aria-label="Configuración del agente"></p>
+      <div class="control-temperature">
+        <label for="temperature">
+          temperature <output id="temperature-valor" for="temperature">0</output>
+        </label>
+        <input type="range" id="temperature" min="0" max="2" step="0.1" value="0" />
+        <button type="button" id="temperature-reset" class="chico" hidden>Restablecer</button>
+        <p class="ayuda">
+          0 = respuestas más repetibles · más alto = más variadas. Vale solo para esta
+          página: no modifica el <code>.agent.md</code>.
+        </p>
+      </div>
+      <div class="pie-dialogo">
+        <span></span>
+        <button type="button" id="ajustes-cerrar" class="primario">Cerrar</button>
+      </div>
+    </dialog>
+
+    <dialog id="historial-dialogo" class="ancho">
+      <h2>Historial de consultas</h2>
+      <p id="historial-resumen" class="ayuda"></p>
+      <p id="historial-mensaje" class="mensaje-error" role="alert" hidden></p>
+      <div class="tabla-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>CUIT</th>
+              <th>Razón social</th>
+              <th>Estado</th>
+              <th>Fecha</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="historial"></tbody>
+        </table>
+      </div>
+      <div class="pie-dialogo">
+        <button type="button" id="historial-limpiar" class="peligro">Borrar todo el historial</button>
+        <button type="button" id="historial-cerrar" class="primario">Cerrar</button>
+      </div>
+    </dialog>
+
+    <dialog id="confirmacion">
+      <h2 id="confirmacion-titulo"></h2>
+      <p id="confirmacion-texto"></p>
+      <div class="pie-dialogo">
+        <button type="button" id="confirmacion-cancelar">Cancelar</button>
+        <button type="button" id="confirmacion-aceptar" class="peligro"></button>
+      </div>
+    </dialog>
+
+    <dialog id="detalle">
+      <h2>Detalle de la consulta</h2>
+      <pre id="detalle-contenido"></pre>
+      <div class="pie-dialogo">
+        <span></span>
+        <button type="button" id="detalle-cerrar" class="primario">Cerrar</button>
+      </div>
+    </dialog>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

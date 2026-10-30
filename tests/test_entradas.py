@@ -80,6 +80,50 @@ def test_leer_csv_demasiado_grande_falla(tmp_path, monkeypatch):
         entradas.leer_csv_cuits(ruta)
 
 
+def test_extraer_cuits_de_texto_libre_separa_validos_e_invalidos():
+    # Arrange
+    texto = f"{VALIDO}\n{INVALIDO}, {OTRO_VALIDO};20-00000002-8"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert validos == [VALIDO, OTRO_VALIDO]  # el último repite VALIDO con guiones
+    assert invalidos == [INVALIDO]
+
+
+def test_extraer_cuits_acepta_un_csv_pegado_e_ignora_encabezados_y_notas():
+    # Arrange
+    texto = f"cuit,nota\n{VALIDO},proveedor de ejemplo (ficticio)\n{OTRO_VALIDO},SA\n"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert (validos, invalidos) == ([VALIDO, OTRO_VALIDO], [])
+
+
+@pytest.mark.parametrize("texto", ["", "   \n ", "hola mundo", "cuit,nota", "q1-2024x"])
+def test_extraer_cuits_sin_numeros_devuelve_vacio(texto):
+    # Arrange / Act
+    resultado = entradas.extraer_cuits(texto)
+    # Assert
+    assert resultado == ([], [])
+
+
+def test_extraer_cuits_con_demasiados_falla(monkeypatch):
+    # Arrange
+    monkeypatch.setattr(entradas, "MAX_FILAS_CSV", 2)
+    texto = f"{VALIDO} {OTRO_VALIDO} 20000000037"
+    # Act / Assert
+    with pytest.raises(EntradaInvalidaError, match="más de 2"):
+        entradas.extraer_cuits(texto)
+
+
+def test_extraer_cuits_rechaza_un_numero_gigante_en_lugar_de_pasarlo_al_prompt():
+    # Arrange
+    texto = "9" * 5000
+    # Act / Assert
+    with pytest.raises(EntradaInvalidaError, match="demasiado largo"):
+        entradas.extraer_cuits(texto)
+
+
 def test_armar_pedido_incluye_los_invalidos_como_descartados():
     # Arrange
     validos, invalidos = [VALIDO], [INVALIDO]

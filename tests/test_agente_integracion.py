@@ -249,3 +249,29 @@ def test_la_traza_muestra_la_temperature_realmente_usada(entorno, modelo_falso, 
     )
     # Assert
     assert "temperature=1.5" in capsys.readouterr().err
+
+
+def test_los_eventos_de_herramientas_y_texto_atraviesan_el_servidor_mcp_real(
+    entorno, modelo_falso, monkeypatch
+):
+    # Arrange: la UI llama a `web.ejecutar_agente`, que pasa por `agent.principal`.
+    import web
+
+    monkeypatch.setattr(agent, "AGENTE_POR_DEFECTO", entorno["agente"])
+    _, instancias = modelo_falso
+    eventos = []
+    # Act
+    informe = web.ejecutar_agente(
+        "verificar-proveedores", f"Verificá {CUIT_GUARDADO}", lambda _linea: None,
+        eventos=eventos.append, temperature=0.4,
+    )
+    # Assert
+    assert informe == INFORME
+    tipos = [e["tipo"] for e in eventos]
+    assert tipos[:2] == ["herramienta", "herramienta_fin"]
+    assert eventos[0]["nombre"] == "consultar_cuit"
+    assert eventos[0]["argumentos"] == {"cuit": CUIT_GUARDADO}
+    assert eventos[1]["ok"] is True  # lo resolvió el servidor real desde el historial
+    assert "".join(e["delta"] for e in eventos if e["tipo"] == "texto") == INFORME
+    assert tipos.count("texto") >= 2  # llegó en pedazos
+    assert instancias[0].kwargs["temperature"] == 0.4

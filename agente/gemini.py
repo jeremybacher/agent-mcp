@@ -9,10 +9,15 @@ from google.genai import types
 from agente.mcp_cliente import HerramientaMCP
 from agente.modelo import LlamadaHerramienta, ResultadoHerramienta, Turno
 
+# Sin tope, un pedido colgado dejaría tomado el cupo de la UI (una ejecución a la vez)
+# hasta reiniciar el servidor. En streaming rige entre fragmentos, no sobre el total.
+TIMEOUT_MS = 60_000
+
 
 def _opciones_http() -> types.HttpOptions:
-    """Reintenta con espera exponencial ante picos de demanda y límites de cuota."""
+    """Reintenta con espera exponencial ante picos de demanda y límites de cuota, y corta lo que se cuelga."""
     return types.HttpOptions(
+        timeout=TIMEOUT_MS,
         retry_options=types.HttpRetryOptions(
             attempts=4,
             initial_delay=2.0,
