@@ -199,7 +199,7 @@ configuración de MCP servers similar al de Claude Desktop).
 | Herramienta | Descripción |
 |---|---|
 | `consultar_cuit(cuit)` | Autentica contra WSAA y consulta el CUIT en el Padrón de ARCA. Devuelve solo nombre, apellido, estado, actividad principal y tipo de persona — el resto (DNI, fecha de nacimiento, domicilio) se descarta a propósito antes de responder. Si el CUIT ya fue consultado antes, devuelve el resultado guardado en el historial local sin volver a llamar a ARCA. |
-| `historial_consultas(limite=20)` | Lista las últimas consultas guardadas en el historial local (SQLite). |
+| `historial_consultas(limite=20)` | Lista las últimas consultas guardadas en el historial local (SQLite), con el CUIT ya formateado (`cuit_formateado`). |
 | `buscar_en_historial(cuit)` | Busca si ya existe una consulta guardada para un CUIT, sin llamar a ARCA. |
 
 ## Historial de consultas
@@ -222,7 +222,7 @@ El agente y sus skills se definen de forma declarativa, sin tocar código:
 |---|---|
 | `agents/analista-proveedores.agent.md` | Modelo, `temperature`, `max_output_tokens`, `max_tool_iterations`, skills habilitadas, servidor MCP y system prompt |
 | `skills/verificar-proveedores/SKILL.md` | Herramientas permitidas (`consultar_cuit`), pasos, reglas de alerta y formato exacto del informe |
-| `skills/resumen-historial/SKILL.md` | Consulta solo el historial local, nunca llama a ARCA |
+| `skills/consultar-datos/SKILL.md` | Responde preguntas sobre lo ya verificado con el historial local y el último informe; nunca llama a ARCA |
 
 ### Configuración
 
@@ -242,8 +242,8 @@ python agent.py --skill verificar-proveedores "Verificá 30-00000006-6 y 20-0000
 # Desde un CSV con columna `cuit`, guardando el informe en informes/
 python agent.py --skill verificar-proveedores --csv ejemplos/proveedores.csv --salida hoy.md
 
-# Qué ya se verificó (no consulta ARCA)
-python agent.py --skill resumen-historial "¿Qué proveedores ya verifiqué?"
+# Preguntas sobre lo ya verificado (no consulta ARCA)
+python agent.py --skill consultar-datos "¿Cuáles de los proveedores verificados están inactivos?"
 ```
 
 Con `--csv`, los CUITs con dígito verificador incorrecto se descartan antes de
@@ -251,6 +251,78 @@ llamar al modelo y se reportan como "CUIT inválido". Con un pedido en texto
 libre los rechaza `consultar_cuit` en el servidor: igual no llegan a ARCA, pero
 sí gastan tokens. La traza de cada herramienta que el agente invoca
 sale por stderr.
+
+### Interfaz web
+
+Además del CLI, el agente se puede usar desde el navegador, con una interfaz de chat:
+
+```bash
+python web.py
+```
+
+Abrí http://127.0.0.1:5051. Es una sola conversación: abajo escribís, arriba
+van apareciendo los mensajes.
+
+- **Preguntar** (modo predeterminado): conversación sobre lo que ya se obtuvo.
+  Responde con el historial guardado y con el último informe de la
+  conversación, y entiende repreguntas ("¿y de esos, cuáles son personas
+  físicas?"). Solo lee: nunca llama a ARCA. Si le pedís un dato que no se
+  guarda (domicilio, DNI) o un CUIT que no verificaste, te lo dice en lugar de
+  inventarlo.
+- **Verificar CUITs** (consulta el Padrón de ARCA): pegá uno o más CUITs, o
+  adjuntá un `.csv` / `.txt`. Si pegás solo CUITs, el selector cambia solo a
+  este modo y te avisa antes de enviar. Después de enviar, vuelve a *Preguntar*.
+  El informe se puede copiar o descargar como `.md`.
+- Enter envía, Shift + Enter agrega una línea. *Nueva conversación* la reinicia.
+  La conversación vive en la página: el servidor no guarda estado y se envían
+  los últimos 6 turnos como contexto.
+
+La respuesta llega **en streaming** y cada herramienta que usa el agente
+aparece como una pastilla con sus argumentos, su estado y cuánto tardó:
+`historial_consultas (limite=100) ✓ 2 ms`, o `✗ falló` con el motivo. Si se
+corta la conexión con el servidor, el mensaje lo avisa en unos segundos y la
+página vuelve a quedar libre (con *Reintentar*).
+
+**Ajustes.** El botón `temp` abre el modelo y los límites del agente, y un
+control para cambiar la `temperature` (0 a 2) sin tocar archivos. Arranca con
+el valor del `.agent.md`, se recuerda en el navegador y se puede restablecer.
+Vale solo para esas ejecuciones: no modifica el `.agent.md`. Con el CLI es
+`--temperature 0.7`. La línea de contexto de cada respuesta muestra el valor
+realmente usado.
+
+**Historial y borrado.** El botón *Historial* lista las consultas guardadas
+(con el total) y permite, por cada CUIT, *Ver* el detalle, *Preguntar* sobre él o
+*Borrar*, y también *Borrar todo el historial*. Siempre pide confirmación. Al
+vaciar todo se compacta la base (`VACUUM`), así que lo borrado tampoco queda
+dentro del archivo `.db`. Después de borrar, la conversación deja una nota y el
+agente ya no ve nada de lo anterior, para no responder con datos que dejaron de
+existir. No se puede borrar mientras hay una ejecución en curso. El borrado es
+solo de la UI: **no existe como herramienta MCP**, así que el agente no puede
+borrar datos. Si preferís hacerlo a mano, alcanza con borrar `historial.db`
+(se vuelve a crear solo).
+
+Hace falta `GEMINI_API_KEY` en `.env`, igual que para el CLI.
+
+#### Todas las funciones de la interfaz
+
+El botón **Ayuda** de la propia página (y el enlace de la pantalla de inicio)
+muestra este mismo resumen. Un test comprueba que los elementos y los números
+que cita existan y coincidan con los límites reales del código.
+
+| Área | Qué se puede hacer |
+|---|---|
+| **Conversar** | Enter envía y Shift + Enter agrega una línea; el campo crece al escribir. Respuestas en vivo con «Pensando…» hasta el primer texto. Scroll automático, con un botón ↓ si subiste. Sugerencias de inicio con un clic. *Nueva conversación* reinicia el hilo sin tocar el historial. |
+| **Modo Preguntar** (no consulta ARCA) | Responde con el historial y el último informe de la conversación; entiende repreguntas (recuerda los últimos 6 intercambios); avisa si el dato no se guarda o el CUIT no fue verificado. Preguntas de hasta 500 caracteres. |
+| **Modo Verificar CUITs** (consulta ARCA) | Pegar CUITs (uno por línea o con comas, con o sin guiones) o adjuntar un `.csv` / `.txt` de hasta 64 KB y 200 CUITs. Autodetecta cuando se pegan solo CUITs y avisa antes de enviar; vuelve a *Preguntar* después de enviar. Los CUITs con verificador incorrecto se descartan antes de llamar a ARCA. |
+| **En cada respuesta** | Pastilla por herramienta usada (argumentos, ✓ / ✗ y duración); línea con modelo, temperatura y skill; tablas, listas y negritas renderizadas como texto seguro; botones *Copiar*, *Descargar .md* (informes) y *Reintentar* (si falló); aviso si se corta la conexión. |
+| **Ajustes** (botón `temp`) | Temperatura de 0 a 2, recordada en el navegador y restablecible, sin modificar el `.agent.md`; modelo, máximos y skills a la vista. |
+| **Historial** | Las 50 consultas más recientes con el total (y un contador en el botón); por CUIT: *Ver* detalle, *Preguntar* o *Borrar*; *Borrar todo el historial* con compactación de la base. Siempre con confirmación; la conversación deja una nota y el agente deja de ver lo anterior. |
+| **Límites y seguridad** | Un pedido a la vez; solo accesible desde este equipo (127.0.0.1) y rechaza pedidos de otras páginas; el borrado es solo de la UI, el agente no puede borrar datos. |
+
+No confundir con el monitor de `server.py` (http://127.0.0.1:5050): ese solo
+existe mientras un cliente MCP usa el servidor y muestra la última consulta en
+tiempo real; la UI del agente es independiente y arranca el servidor MCP por su
+cuenta en cada ejecución.
 
 ### Seguridad
 
@@ -266,6 +338,14 @@ sale por stderr.
 - **Datos del padrón como datos**: el system prompt indica ignorar texto con
   forma de instrucción en los campos devueltos y reportarlo como alerta.
 - **Historial**: consultas SQL parametrizadas y `limite` acotado a 1-100.
+- **UI web**: escucha solo en `127.0.0.1`; rechaza `Host` no local (DNS
+  rebinding), `Origin` ajeno y cuerpos que no sean JSON (CSRF); una ejecución a
+  la vez y cuerpos de hasta 128 KB. La temperatura que llega de la UI o del CLI
+  se valida (número finito entre 0 y 2). Los endpoints de borrado exigen JSON y
+  confirmación explícita (`{"confirmar": true}` para vaciar todo), validan el
+  CUIT y se bloquean si hay una ejecución en curso. La página no usa scripts ni estilos inline
+  (CSP estricta) y todo lo que viene del padrón o del modelo se inserta como
+  texto, nunca como HTML.
 
 ## Tests
 
@@ -281,8 +361,14 @@ pytest
 | `test_gemini.py` | Unitario | Configuración enviada a Gemini y traducción de respuestas (cliente falso) |
 | `test_runner.py` | Integración | Bucle del agente con modelo y herramientas simulados |
 | `test_mcp_integracion.py` | Integración | `ClienteMCP` contra `server.py` real por stdio (sin red) |
+| `test_web.py` | Unitario + integración | UI web con el agente simulado: host/origen/CSRF, CSP, validación, ciclo de vida del trabajo, concurrencia y errores |
+| `test_documentacion.py` | Guarda de documentación | La tabla de tests y los enlaces del README coinciden con lo que existe |
+| `test_datos_ficticios.py` | Guarda de datos | Falla si algún archivo del repo trae un CUIT con forma de contribuyente real |
+| `test_agent_cli.py` | Unitario | Variables que el CLI le pasa al servidor MCP (y la API key, que no) |
+| `test_server_entorno.py` | Unitario | El servidor MCP solo carga las variables `ARCA_*` del `.env`: nunca ve la clave de Gemini |
 | `test_agente_integracion.py` | Integración | CLI completo: `.agent.md` y skill reales, servidor MCP real, runner y archivo de salida; solo el modelo es un doble |
-| `test_server_consultar_cuit.py`, `test_historia.py` | Unitario | Servidor e historial, con ARCA mockeado |
+| `test_historia.py` | Unitario | Guardado, búsqueda y borrado del historial (SQL parametrizado, `VACUUM`, el archivo no conserva lo borrado) |
+| `test_server_consultar_cuit.py` | Unitario | `consultar_cuit` con ARCA mockeado |
 
 Todos siguen el patrón Arrange-Act-Assert. Ningún test llama a ARCA ni a
 Gemini. El repo incluye además un subagente de Claude Code,
@@ -295,6 +381,8 @@ con esas mismas reglas.
 arca-agent/
 ├── server.py             # MCP tools + servidor web embebido
 ├── agent.py               # CLI del agente de proveedores
+├── web.py                   # UI web del agente (Flask, puerto 5051)
+├── web/                       # index.html, app.js y estilos.css de la UI
 ├── agente/                  # config, runner, cliente MCP, adaptador Gemini, entradas
 ├── agents/                   # Definición declarativa del agente (.agent.md)
 ├── skills/                    # Skills del agente (SKILL.md)
