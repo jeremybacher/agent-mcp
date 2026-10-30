@@ -180,23 +180,35 @@
           consultasActuales = consultas;
 
           if (consultas.length === 0) {
-            cuerpo.innerHTML =
-              '<tr><td class="vacio" colspan="5">Sin consultas todavía...</td></tr>';
+            const vacia = document.createElement("td");
+            vacia.className = "vacio";
+            vacia.colSpan = 5;
+            vacia.textContent = "Sin consultas todavía...";
+            cuerpo.replaceChildren(document.createElement("tr"));
+            cuerpo.firstChild.append(vacia);
             return;
           }
 
-          cuerpo.innerHTML = consultas
-            .map((c, indice) => {
+          // Los datos del padrón se insertan como texto, nunca como HTML.
+          cuerpo.replaceChildren(
+            ...consultas.map((c, indice) => {
+              const fila = document.createElement("tr");
               const fecha = new Date(c.fecha).toLocaleString();
-              return `<tr>
-                        <td>${c.cuit ?? ""}</td>
-                        <td>${c.razon_social ?? ""}</td>
-                        <td>${c.estado ?? ""}</td>
-                        <td>${fecha}</td>
-                        <td><button class="ver" onclick="abrirDialogoJson(${indice})">Ver</button></td>
-                    </tr>`;
-            })
-            .join("");
+              for (const valor of [c.cuit ?? "", c.razon_social ?? "", c.estado ?? "", fecha]) {
+                const celda = document.createElement("td");
+                celda.textContent = valor;
+                fila.append(celda);
+              }
+              const accion = document.createElement("td");
+              const ver = document.createElement("button");
+              ver.className = "ver";
+              ver.textContent = "Ver";
+              ver.addEventListener("click", () => abrirDialogoJson(indice));
+              accion.append(ver);
+              fila.append(accion);
+              return fila;
+            }),
+          );
         } catch (err) {
           // Servidor cargando
         }
