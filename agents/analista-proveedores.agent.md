@@ -8,7 +8,7 @@ max_output_tokens: 2048
 max_tool_iterations: 12
 skills:
   - verificar-proveedores
-  - resumen-historial
+  - consultar-datos
 mcp_server:
   command: venv/bin/python3
   args:

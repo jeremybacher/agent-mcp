@@ -9,6 +9,14 @@ def normalizar_cuit(cuit: str) -> str:
     return str(cuit).strip().replace("-", "").replace(" ", "")
 
 
+def formatear_cuit(cuit: str) -> str:
+    """Devuelve el CUIT como XX-XXXXXXXX-X; si no tiene 11 dígitos, lo deja igual."""
+    normalizado = normalizar_cuit(cuit)
+    if len(normalizado) != 11 or not normalizado.isascii() or not normalizado.isdigit():
+        return str(cuit)
+    return f"{normalizado[:2]}-{normalizado[2:10]}-{normalizado[10]}"
+
+
 def digito_verificador(base: str) -> int | None:
     """Calcula el dígito verificador (módulo 11) de los primeros 10 dígitos.
 

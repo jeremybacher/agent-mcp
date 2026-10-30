@@ -51,6 +51,26 @@ def test_cuit_invalido(cuit, motivo):
     assert resultado is False, motivo
 
 
+@pytest.mark.parametrize(
+    "entrada, esperado",
+    [
+        ("30000000066", "30-00000006-6"),
+        ("30-00000006-6", "30-00000006-6"),  # ya formateado
+        (" 20 00000002 8 ", "20-00000002-8"),
+        ("123", "123"),  # corto: se deja igual
+        ("2000000002890", "2000000002890"),  # largo: se deja igual
+        ("2000000002a", "2000000002a"),  # no numérico: se deja igual
+        ("２００００００００２８", "２００００００００２８"),  # dígitos unicode: se deja igual
+    ],
+)
+def test_formatear_cuit(entrada, esperado):
+    # Arrange: entrada y esperado vienen de la parametrización.
+    # Act
+    resultado = validacion.formatear_cuit(entrada)
+    # Assert
+    assert resultado == esperado
+
+
 def test_normalizar_cuit_quita_guiones_y_espacios():
     # Arrange
     crudo = " 20-00000002-8 "

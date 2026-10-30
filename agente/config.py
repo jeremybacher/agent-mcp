@@ -47,6 +47,15 @@ class Agente:
     skills: dict[str, Skill] = field(default_factory=dict)
 
 
+def validar_temperature(valor) -> float:
+    """Valida una temperatura recibida de afuera (CLI o UI): número finito entre 0 y 2."""
+    # bool es subclase de int. NaN e infinito no cumplen `0 <= x <= 2`, y comparar no
+    # convierte los enteros gigantes a float (math.isfinite lanzaría OverflowError).
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)) or not 0 <= valor <= 2:
+        raise ConfigError("'temperature' debe ser un número entre 0 y 2")
+    return float(valor)
+
+
 def separar_frontmatter(texto: str) -> tuple[dict, str]:
     """Separa un documento Markdown en (frontmatter YAML, cuerpo)."""
     coincidencia = _PATRON_FRONTMATTER.match(texto)

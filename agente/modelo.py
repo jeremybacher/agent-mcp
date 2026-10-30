@@ -1,5 +1,6 @@
 """Tipos neutrales entre el runner y el proveedor del LLM."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -35,6 +36,14 @@ class Turno:
 class Modelo(Protocol):
     """Conversación con un LLM. Mantiene su propio historial."""
 
-    def enviar(self, entrada: "str | list[ResultadoHerramienta]") -> Turno:
-        """Envía el pedido del usuario o los resultados de herramientas."""
+    def enviar(
+        self,
+        entrada: "str | list[ResultadoHerramienta]",
+        al_texto: Callable[[str], None] | None = None,
+    ) -> Turno:
+        """Envía el pedido del usuario o los resultados de herramientas.
+
+        Si se pasa `al_texto`, el modelo transmite la respuesta y llama a esa
+        función con cada fragmento de texto a medida que llega.
+        """
         ...

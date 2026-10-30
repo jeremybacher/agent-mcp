@@ -164,3 +164,127 @@ def test_sin_api_key_ni_cliente_falla_con_mensaje_claro(monkeypatch):
     # Act / Assert
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         ModeloGemini("m", "s", [HERRAMIENTA], 0.0, 10)
+
+
+# ---------- streaming ----------
+
+
+def _fragmento(partes=None, motivo=None, con_contenido=True):
+    contenido = types.Content(role="model", parts=partes or []) if con_contenido else None
+    return SimpleNamespace(candidates=[SimpleNamespace(content=contenido, finish_reason=motivo)])
+
+
+class ClienteStream:
+    """Imita `genai.Client` en modo stream: cada respuesta es una lista de fragmentos.
+
+    No define `generate_content`: si el modelo lo usara estando en stream, fallaría.
+    """
+
+    def __init__(self, fragmentos_por_respuesta):
+        self._respuestas = list(fragmentos_por_respuesta)
+        self.llamadas = []
+        self.models = SimpleNamespace(generate_content_stream=self._stream)
+
+    def _stream(self, *, model, contents, config):
+        self.llamadas.append({"model": model, "contents": list(contents), "config": config})
+        yield from self._respuestas.pop(0)
+
+
+def _texto(valor, **extra):
+    return types.Part(text=valor, **extra)
+
+
+def test_el_texto_se_entrega_fragmento_por_fragmento_y_se_acumula():
+    # Arrange
+    cliente = ClienteStream([[
+        _fragmento([_texto("Ho")]), _fragmento([_texto("la ")]), _fragmento([_texto("mundo")]),
+    ]])
+    recibidos = []
+    # Act
+    turno = _modelo(cliente).enviar("Hola", al_texto=recibidos.append)
+    # Assert
+    assert recibidos == ["Ho", "la ", "mundo"]
+    assert turno.texto == "Hola mundo"
+    assert turno.llamadas == ()
+
+
+def test_una_llamada_a_herramienta_en_stream_se_traduce_y_no_se_emite_como_texto():
+    # Arrange
+    llamada = types.Part.from_function_call(name="consultar_cuit", args={"cuit": "30000000066"})
+    cliente = ClienteStream([[_fragmento([llamada])]])
+    recibidos = []
+    # Act
+    turno = _modelo(cliente).enviar("Verificá", al_texto=recibidos.append)
+    # Assert
+    assert turno.llamadas == (LlamadaHerramienta("consultar_cuit", {"cuit": "30000000066"}),)
+    assert recibidos == []
+
+
+def test_las_partes_se_guardan_tal_cual_incluida_la_firma_de_razonamiento():
+    # Arrange: hay modelos que exigen devolver `thought_signature` en el function calling.
+    llamada = types.Part(
+        function_call=types.FunctionCall(name="consultar_cuit", args={"cuit": "1"}),
+        thought_signature=b"firma",
+    )
+    cliente = ClienteStream([[_fragmento([llamada])], [_fragmento([_texto("fin")])]])
+    modelo = _modelo(cliente)
+    modelo.enviar("Verificá", al_texto=lambda _t: None)
+    # Act
+    modelo.enviar([ResultadoHerramienta("consultar_cuit", {})], al_texto=lambda _t: None)
+    # Assert
+    historial = cliente.llamadas[1]["contents"]
+    assert [c.role for c in historial] == ["user", "model", "user"]
+    assert historial[1].parts[0].thought_signature == b"firma"
+
+
+def test_las_partes_de_razonamiento_no_se_muestran_como_texto():
+    # Arrange
+    cliente = ClienteStream([[
+        _fragmento([_texto("pensando...", thought=True)]), _fragmento([_texto("Respuesta")]),
+    ]])
+    recibidos = []
+    # Act
+    turno = _modelo(cliente).enviar("Hola", al_texto=recibidos.append)
+    # Assert
+    assert recibidos == ["Respuesta"]
+    assert turno.texto == "Respuesta"
+
+
+def test_el_stream_marca_truncado_si_el_ultimo_fragmento_corto_por_tokens():
+    # Arrange
+    cliente = ClienteStream([[
+        _fragmento([_texto("respuesta")]),
+        _fragmento([_texto(" cortada")], motivo=types.FinishReason.MAX_TOKENS),
+    ]])
+    # Act
+    turno = _modelo(cliente).enviar("Hola", al_texto=lambda _t: None)
+    # Assert
+    assert turno.texto == "respuesta cortada"
+    assert turno.truncado is True
+
+
+def test_un_stream_sin_contenido_devuelve_turno_vacio_y_no_ensucia_el_historial():
+    # Arrange
+    vacio = [SimpleNamespace(candidates=[]), _fragmento(con_contenido=False)]
+    cliente = ClienteStream([vacio, [_fragmento([_texto("ok")])]])
+    modelo = _modelo(cliente)
+    # Act
+    primero = modelo.enviar("Hola", al_texto=lambda _t: None)
+    modelo.enviar("Reintento", al_texto=lambda _t: None)
+    # Assert
+    assert primero.texto == "" and primero.llamadas == ()
+    assert [c.role for c in cliente.llamadas[1]["contents"]] == ["user"]
+
+
+def test_el_stream_usa_la_misma_configuracion_que_la_llamada_normal():
+    # Arrange
+    cliente = ClienteStream([[_fragmento([_texto("ok")])]])
+    modelo = _modelo(cliente, temperature=0.4, max_output_tokens=99)
+    # Act
+    modelo.enviar("Hola", al_texto=lambda _t: None)
+    # Assert
+    config = cliente.llamadas[0]["config"]
+    assert cliente.llamadas[0]["model"] == "gemini-test"
+    assert config.temperature == pytest.approx(0.4)
+    assert config.max_output_tokens == 99
+    assert config.automatic_function_calling.disable is True

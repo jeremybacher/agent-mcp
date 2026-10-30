@@ -192,3 +192,121 @@ def test_armar_system_prompt_combina_agente_y_skill(agente, skill):
     assert prompt.startswith("Sos un analista.")
     assert "Skill activa: verificar" in prompt
     assert "Consultá cada CUIT." in prompt
+
+
+# ---------- eventos y streaming ----------
+
+
+class ModeloConStreaming(ModeloGuionado):
+    """Como `ModeloGuionado`, pero entrega el texto en pedazos si se lo piden."""
+
+    def __init__(self, turnos):
+        super().__init__(turnos)
+        self.al_texto_recibido = []
+
+    def enviar(self, entrada, al_texto=None):
+        self.al_texto_recibido.append(al_texto)
+        turno = super().enviar(entrada)
+        if al_texto and turno.texto:
+            for trozo in (turno.texto[:4], turno.texto[4:]):
+                al_texto(trozo)
+        return turno
+
+
+def _correr_con_eventos(agente, skill, modelo, herramientas):
+    eventos = []
+    texto = asyncio.run(
+        runner.ejecutar(agente, skill, "Verificá", modelo, herramientas, lambda _l: None, eventos.append)
+    )
+    return texto, eventos
+
+
+def test_con_eventos_emite_la_herramienta_y_el_texto_transmitido(agente, skill):
+    # Arrange
+    pide = Turno(llamadas=(LlamadaHerramienta("consultar_cuit", {"cuit": "30000000066"}),))
+    modelo = ModeloConStreaming([pide, Turno(texto="Informe listo")])
+    # Act
+    texto, eventos = _correr_con_eventos(agente, skill, modelo, HerramientasFalsas())
+    # Assert
+    assert texto == "Informe listo"
+    tipos = [e["tipo"] for e in eventos]
+    assert tipos == ["herramienta", "herramienta_fin", "texto", "texto"]
+    assert eventos[0] == {
+        "tipo": "herramienta", "id": 1, "nombre": "consultar_cuit",
+        "argumentos": {"cuit": "30000000066"},
+    }
+    assert eventos[1]["id"] == 1 and eventos[1]["ok"] is True and eventos[1]["error"] is None
+    assert eventos[1]["ms"] >= 0
+    assert "".join(e["delta"] for e in eventos if e["tipo"] == "texto") == "Informe listo"
+
+
+def test_los_ids_de_herramientas_siguen_entre_turnos(agente, skill):
+    # Arrange
+    dos = Turno(llamadas=(
+        LlamadaHerramienta("consultar_cuit", {"cuit": "A"}),
+        LlamadaHerramienta("consultar_cuit", {"cuit": "B"}),
+    ))
+    una = Turno(llamadas=(LlamadaHerramienta("consultar_cuit", {"cuit": "C"}),))
+    modelo = ModeloConStreaming([dos, una, Turno(texto="fin")])
+    # Act
+    _, eventos = _correr_con_eventos(agente, skill, modelo, HerramientasFalsas())
+    # Assert
+    ids = [e["id"] for e in eventos if e["tipo"] == "herramienta"]
+    assert ids == [1, 2, 3]
+
+
+def test_una_herramienta_fuera_de_la_skill_se_informa_como_fallida(agente, skill):
+    # Arrange
+    turno = Turno(llamadas=(LlamadaHerramienta("historial_consultas", {}),))
+    modelo = ModeloConStreaming([turno, Turno(texto="fin")])
+    herramientas = HerramientasFalsas()
+    # Act
+    _, eventos = _correr_con_eventos(agente, skill, modelo, herramientas)
+    # Assert
+    fin = next(e for e in eventos if e["tipo"] == "herramienta_fin")
+    assert fin["ok"] is False
+    assert "no está habilitada" in fin["error"]
+    assert herramientas.llamadas == []
+
+
+def test_una_excepcion_de_la_herramienta_se_informa_como_fallida(agente, skill):
+    # Arrange
+    turno = Turno(llamadas=(LlamadaHerramienta("consultar_cuit", {"cuit": "X"}),))
+    modelo = ModeloConStreaming([turno, Turno(texto="fin")])
+    herramientas = HerramientasFalsas({"consultar_cuit": ConnectionError("sin red")})
+    # Act
+    _, eventos = _correr_con_eventos(agente, skill, modelo, herramientas)
+    # Assert
+    fin = next(e for e in eventos if e["tipo"] == "herramienta_fin")
+    assert fin["ok"] is False
+    assert "sin red" in fin["error"]
+
+
+def test_un_resultado_con_error_cuenta_como_fallido_aunque_no_lance(agente, skill):
+    # Arrange
+    turno = Turno(llamadas=(LlamadaHerramienta("consultar_cuit", {"cuit": "X"}),))
+    modelo = ModeloConStreaming([turno, Turno(texto="fin")])
+    herramientas = HerramientasFalsas({"consultar_cuit": {"error": "CUIT inválido"}})
+    # Act
+    _, eventos = _correr_con_eventos(agente, skill, modelo, herramientas)
+    # Assert
+    fin = next(e for e in eventos if e["tipo"] == "herramienta_fin")
+    assert (fin["ok"], fin["error"]) == (False, "CUIT inválido")
+
+
+def test_sin_eventos_no_se_pide_streaming_al_modelo(agente, skill):
+    # Arrange
+    modelo = ModeloConStreaming([Turno(texto="Listo")])
+    # Act
+    _correr(agente, skill, modelo, HerramientasFalsas())
+    # Assert: el modelo no recibió ningún callback de texto.
+    assert modelo.al_texto_recibido == [None]
+
+
+def test_con_eventos_el_modelo_recibe_un_callback_de_texto(agente, skill):
+    # Arrange
+    modelo = ModeloConStreaming([Turno(texto="Listo")])
+    # Act
+    _correr_con_eventos(agente, skill, modelo, HerramientasFalsas())
+    # Assert
+    assert callable(modelo.al_texto_recibido[0])

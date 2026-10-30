@@ -4,7 +4,7 @@ import sys
 import threading
 import traceback
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from flask import Flask, jsonify, send_from_directory
 from mcp.server.mcpserver import MCPServer
 
@@ -13,7 +13,19 @@ import padron
 import validacion
 import wsaa
 
-load_dotenv()
+
+def cargar_variables_arca(ruta: str | None = None) -> None:
+    """Carga del .env solo las variables ARCA_*.
+
+    El servidor no necesita (ni debe ver) otras claves del mismo archivo, como la
+    de Gemini. No pisa variables que ya estén definidas en el entorno.
+    """
+    for clave, valor in dotenv_values(ruta).items():
+        if clave.startswith("ARCA_") and valor is not None:
+            os.environ.setdefault(clave, valor)
+
+
+cargar_variables_arca()
 
 MENSAJE_CUIT_INVALIDO = (
     "'{cuit}' no es un CUIT válido: deben ser 11 dígitos con prefijo y "
@@ -114,7 +126,13 @@ def historial_consultas(limite: int = 20) -> dict:
     """
     limite = validacion.acotar_limite(limite)
     log(f"historial_consultas: listando últimas {limite} consultas")
-    return {"consultas": historia.listar_ultimas(limite)}
+    consultas = historia.listar_ultimas(limite)
+    # El CUIT ya formateado evita que el modelo lo arme (y se equivoque).
+    return {
+        "consultas": [
+            {**c, "cuit_formateado": validacion.formatear_cuit(c["cuit"])} for c in consultas
+        ]
+    }
 
 
 @mcp.tool()
@@ -130,7 +148,11 @@ def buscar_en_historial(cuit: str) -> dict:
     if encontrada is None:
         return {"encontrado": False, "cuit": cuit}
 
-    return {"encontrado": True, **encontrada}
+    return {
+        "encontrado": True,
+        **encontrada,
+        "cuit_formateado": validacion.formatear_cuit(encontrada["cuit"]),
+    }
 
 
 @app.route("/")

@@ -1,6 +1,7 @@
 """Adaptador de Gemini (google-genai) con function calling manual."""
 
 import os
+from collections.abc import Callable
 
 from google import genai
 from google.genai import types
@@ -61,8 +62,16 @@ class ModeloGemini:
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
         )
 
-    def enviar(self, entrada: str | list[ResultadoHerramienta]) -> Turno:
-        """Agrega el mensaje al historial y devuelve la respuesta del modelo."""
+    def enviar(
+        self,
+        entrada: str | list[ResultadoHerramienta],
+        al_texto: Callable[[str], None] | None = None,
+    ) -> Turno:
+        """Agrega el mensaje al historial y devuelve la respuesta del modelo.
+
+        Con `al_texto` la respuesta se transmite: cada fragmento de texto se
+        entrega apenas llega, sin esperar a que termine.
+        """
         if isinstance(entrada, str):
             partes = [types.Part.from_text(text=entrada)]
         else:
@@ -72,24 +81,58 @@ class ModeloGemini:
             ]
         self._contenidos.append(types.Content(role="user", parts=partes))
 
-        respuesta = self._cliente.models.generate_content(
-            model=self._modelo, contents=self._contenidos, config=self._config
-        )
-        if not respuesta.candidates or respuesta.candidates[0].content is None:
+        if al_texto is None:
+            partes_modelo, motivo = self._generar()
+        else:
+            partes_modelo, motivo = self._transmitir(al_texto)
+
+        if partes_modelo is None:
             # Sin respuesta: se saca el mensaje enviado para no dejar dos
             # turnos "user" seguidos en el historial.
             self._contenidos.pop()
             return Turno(texto="")
 
-        candidato = respuesta.candidates[0]
-        contenido = candidato.content
-        self._contenidos.append(contenido)
+        # Se guardan las partes tal como las devolvió el modelo (incluidas las
+        # firmas de razonamiento): hay modelos que las exigen en el function calling.
+        self._contenidos.append(types.Content(role="model", parts=partes_modelo))
 
         llamadas = tuple(
             LlamadaHerramienta(p.function_call.name, dict(p.function_call.args or {}))
-            for p in contenido.parts or []
+            for p in partes_modelo
             if p.function_call
         )
-        texto = "".join(p.text for p in contenido.parts or [] if p.text)
-        truncado = candidato.finish_reason == types.FinishReason.MAX_TOKENS
+        texto = "".join(p.text for p in partes_modelo if p.text and not p.thought)
+        truncado = motivo == types.FinishReason.MAX_TOKENS
         return Turno(texto=texto, llamadas=llamadas, truncado=truncado)
+
+    def _generar(self):
+        """Respuesta completa de una vez: (partes, motivo de fin), o (None, None) si no hubo."""
+        respuesta = self._cliente.models.generate_content(
+            model=self._modelo, contents=self._contenidos, config=self._config
+        )
+        if not respuesta.candidates or respuesta.candidates[0].content is None:
+            return None, None
+        candidato = respuesta.candidates[0]
+        return list(candidato.content.parts or []), candidato.finish_reason
+
+    def _transmitir(self, al_texto: Callable[[str], None]):
+        """Respuesta en streaming: entrega cada fragmento de texto a `al_texto`."""
+        partes: list[types.Part] = []
+        motivo = None
+        hubo_contenido = False
+        for fragmento in self._cliente.models.generate_content_stream(
+            model=self._modelo, contents=self._contenidos, config=self._config
+        ):
+            if not fragmento.candidates:
+                continue
+            candidato = fragmento.candidates[0]
+            if candidato.finish_reason:
+                motivo = candidato.finish_reason
+            if candidato.content is None:
+                continue
+            hubo_contenido = True
+            for parte in candidato.content.parts or []:
+                partes.append(parte)
+                if parte.text and not parte.thought:
+                    al_texto(parte.text)
+        return (partes if hubo_contenido else None), motivo

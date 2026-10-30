@@ -93,6 +93,7 @@ def test_historial_consultas_acota_el_limite(entorno_servidor):
     # Assert
     assert len(resultado["consultas"]) == 1
     assert resultado["consultas"][0]["cuit"] == CUIT_GUARDADO
+    assert resultado["consultas"][0]["cuit_formateado"] == "30-00000006-6"
 
 
 def test_buscar_en_historial_distingue_encontrado_de_no_encontrado(entorno_servidor):
@@ -105,4 +106,5 @@ def test_buscar_en_historial_distingue_encontrado_de_no_encontrado(entorno_servi
     hay, no_hay = _con_servidor(entorno_servidor, accion)
     # Assert
     assert hay["encontrado"] is True
+    assert hay["cuit_formateado"] == "30-00000006-6"
     assert no_hay == {"encontrado": False, "cuit": "20000000028"}

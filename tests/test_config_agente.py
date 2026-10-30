@@ -5,7 +5,13 @@ import textwrap
 
 import pytest
 
-from agente.config import ConfigError, cargar_agente, cargar_skill, separar_frontmatter
+from agente.config import (
+    ConfigError,
+    cargar_agente,
+    cargar_skill,
+    separar_frontmatter,
+    validar_temperature,
+)
 
 AGENTE_VALIDO = """\
 ---
@@ -161,3 +167,25 @@ def test_separar_frontmatter_no_ejecuta_etiquetas_yaml_peligrosas():
     # Act / Assert
     with pytest.raises(ConfigError):
         separar_frontmatter(texto)
+
+
+@pytest.mark.parametrize("valor, esperado", [(0, 0.0), (0.7, 0.7), (1, 1.0), (2, 2.0), (2.0, 2.0)])
+def test_validar_temperature_acepta_numeros_entre_0_y_2(valor, esperado):
+    # Arrange / Act
+    resultado = validar_temperature(valor)
+    # Assert
+    assert resultado == esperado
+    assert isinstance(resultado, float)
+
+
+@pytest.mark.parametrize(
+    "valor",
+    [
+        -0.1, 2.01, 100, True, False, "0.5", None, [0], {"t": 1},
+        float("nan"), float("inf"), float("-inf"), 10**400, -(10**400),  # no deben lanzar OverflowError
+    ],
+)
+def test_validar_temperature_rechaza_lo_que_no_es_un_numero_entre_0_y_2(valor):
+    # Arrange / Act / Assert
+    with pytest.raises(ConfigError, match="temperature"):
+        validar_temperature(valor)

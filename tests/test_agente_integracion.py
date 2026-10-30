@@ -36,7 +36,11 @@ def entorno(tmp_path, monkeypatch):
 
     # El servidor corre en un subproceso: necesita la base temporal por entorno.
     env = {"ARCA_HISTORIAL_DB": ruta_db, "PATH": os.environ.get("PATH", "")}
-    monkeypatch.setattr(agent, "ClienteMCP", lambda *a, **k: ClienteMCP(*a, env=env, **k))
+    monkeypatch.setattr(
+        agent,
+        "ClienteMCP",
+        lambda *a, **k: ClienteMCP(*a, **{**k, "env": {**(k.get("env") or {}), **env}}),
+    )
 
     informes = tmp_path / "informes"
     monkeypatch.setattr(agent, "DIRECTORIO_INFORMES", str(informes))
@@ -68,9 +72,14 @@ def modelo_falso(monkeypatch):
             self._turnos = list(type(self).guion)
             instancias.append(self)
 
-        def enviar(self, entrada):
+        def enviar(self, entrada, al_texto=None):
             self.recibido.append(entrada)
-            return self._turnos.pop(0) if len(self._turnos) > 1 else self._turnos[0]
+            turno = self._turnos.pop(0) if len(self._turnos) > 1 else self._turnos[0]
+            if al_texto and turno.texto:  # como el modelo real: el texto llega en pedazos
+                mitad = len(turno.texto) // 2
+                al_texto(turno.texto[:mitad])
+                al_texto(turno.texto[mitad:])
+            return turno
 
     monkeypatch.setattr(agent, "ModeloGemini", ModeloGuionado)
     return ModeloGuionado, instancias
@@ -137,6 +146,25 @@ def test_el_csv_descarta_localmente_el_cuit_invalido_y_consulta_el_valido(
     assert resultado.resultado["persona"]["razonSocial"] == "ACME SA"
 
 
+def test_el_cli_le_pasa_la_base_de_historial_al_servidor_mcp(
+    entorno, modelo_falso, monkeypatch
+):
+    # Arrange: sin esto, la UI leería una base y el agente consultaría otra.
+    monkeypatch.setenv("ARCA_HISTORIAL_DB", "/ruta/alterna.db")
+    capturado = {}
+    con_entorno_de_prueba = agent.ClienteMCP
+
+    def espia(*args, **kwargs):
+        capturado.update(kwargs)
+        return con_entorno_de_prueba(*args, **kwargs)
+
+    monkeypatch.setattr(agent, "ClienteMCP", espia)
+    # Act
+    _ejecutar(entorno, "--skill", "verificar-proveedores", "--csv", entorno["csv"])
+    # Assert
+    assert capturado["env"] == {"ARCA_HISTORIAL_DB": "/ruta/alterna.db"}
+
+
 def test_skill_no_habilitada_falla_antes_de_llamar_al_modelo(entorno, modelo_falso, capsys):
     # Arrange
     _, instancias = modelo_falso
@@ -176,3 +204,48 @@ def test_un_modelo_que_nunca_termina_corta_por_max_tool_iterations(
     assert f"máximo de {maximo} iteraciones" in capsys.readouterr().err
     assert len(instancias[0].recibido) == maximo
     assert not list(entorno["informes"].glob("*"))  # no se escribió un informe a medias
+
+
+def test_temperature_del_cli_reemplaza_la_del_agent_md_solo_en_esa_ejecucion(
+    entorno, modelo_falso
+):
+    # Arrange
+    _, instancias = modelo_falso
+    original = cargar_agente(entorno["agente"], agent.DIRECTORIO_SKILLS).temperature
+    # Act
+    codigo = _ejecutar(
+        entorno, "--skill", "verificar-proveedores", "--csv", entorno["csv"],
+        "--temperature", "0.7",
+    )
+    # Assert
+    assert codigo == 0
+    assert instancias[0].kwargs["temperature"] == 0.7
+    assert original != 0.7  # el .agent.md no se tocó
+    assert cargar_agente(entorno["agente"], agent.DIRECTORIO_SKILLS).temperature == original
+
+
+@pytest.mark.parametrize("valor", ["5", "-1", "nan", "inf"])
+def test_una_temperature_invalida_del_cli_falla_antes_de_llamar_al_modelo(
+    entorno, modelo_falso, capsys, valor
+):
+    # Arrange
+    _, instancias = modelo_falso
+    # Act
+    codigo = _ejecutar(
+        entorno, "--skill", "verificar-proveedores", "--csv", entorno["csv"],
+        "--temperature", valor,
+    )
+    # Assert
+    assert codigo == 2
+    assert "temperature" in capsys.readouterr().err
+    assert instancias == []
+
+
+def test_la_traza_muestra_la_temperature_realmente_usada(entorno, modelo_falso, capsys):
+    # Arrange / Act
+    _ejecutar(
+        entorno, "--skill", "verificar-proveedores", "--csv", entorno["csv"],
+        "--temperature", "1.5",
+    )
+    # Assert
+    assert "temperature=1.5" in capsys.readouterr().err

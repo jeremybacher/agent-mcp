@@ -3,19 +3,22 @@
 Ejemplos:
     python agent.py --skill verificar-proveedores "Verificá 30-00000006-6"
     python agent.py --skill verificar-proveedores --csv proveedores.csv --salida hoy.md
-    python agent.py --skill resumen-historial "¿Qué proveedores ya verifiqué?"
+    python agent.py --skill consultar-datos "¿Cuáles de los proveedores verificados están inactivos?"
+    python agent.py --skill verificar-proveedores --temperature 0.7 "Verificá 30-00000006-6"
 """
 
 import argparse
 import asyncio
+import dataclasses
 import os
 import sys
+from collections.abc import Callable
 
 from dotenv import load_dotenv
 from google.genai import errors as genai_errors
 
 from agente import runner
-from agente.config import ConfigError, cargar_agente
+from agente.config import ConfigError, cargar_agente, validar_temperature
 from agente.entradas import (
     EntradaInvalidaError,
     armar_pedido_verificacion,
@@ -29,6 +32,15 @@ DIRECTORIO = os.path.dirname(os.path.abspath(__file__))
 AGENTE_POR_DEFECTO = os.path.join(DIRECTORIO, "agents", "analista-proveedores.agent.md")
 DIRECTORIO_SKILLS = os.path.join(DIRECTORIO, "skills")
 DIRECTORIO_INFORMES = os.path.join(DIRECTORIO, "informes")
+VARIABLES_HEREDADAS = ("ARCA_HISTORIAL_DB",)
+
+
+def entorno_del_servidor() -> dict[str, str] | None:
+    """Variables que el servidor MCP debe heredar para usar la misma base que el CLI y la UI."""
+    heredadas = {
+        clave: os.environ[clave] for clave in VARIABLES_HEREDADAS if clave in os.environ
+    }
+    return heredadas or None
 
 
 def parsear_argumentos(argv: list[str] | None = None) -> argparse.Namespace:
@@ -39,15 +51,30 @@ def parsear_argumentos(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--csv", help="CSV con una columna 'cuit'.")
     parser.add_argument("--salida", help="Nombre del .md a guardar dentro de informes/.")
     parser.add_argument("--agente", default=AGENTE_POR_DEFECTO, help="Ruta al .agent.md.")
+    parser.add_argument(
+        "--temperature", type=float,
+        help="Reemplaza la temperatura del .agent.md solo para esta ejecución (0 a 2).",
+    )
     return parser.parse_args(argv)
 
 
-async def principal(args: argparse.Namespace) -> tuple[str, str | None]:
+async def principal(
+    args: argparse.Namespace,
+    registrar: Callable[[str], None] = runner.log,
+    eventos: Callable[[dict], None] | None = None,
+) -> tuple[str, str | None]:
     """Carga la configuración, conecta con el MCP y corre el agente.
 
-    Devuelve el texto del informe y la ruta de salida ya validada (o None).
+    `registrar` recibe cada línea de traza (por defecto, stderr). Si se pasa
+    `eventos`, el modelo transmite su respuesta y se emiten los eventos del
+    runner (texto y herramientas). Si `args.temperature` está definido, reemplaza
+    la del `.agent.md` solo para esta ejecución. Devuelve el texto del informe
+    y la ruta de salida ya validada (o None).
     """
     agente = cargar_agente(args.agente, DIRECTORIO_SKILLS)
+    temperature = getattr(args, "temperature", None)
+    if temperature is not None:
+        agente = dataclasses.replace(agente, temperature=validar_temperature(temperature))
     if args.skill not in agente.skills:
         raise ConfigError(
             f"la skill '{args.skill}' no está habilitada en el agente "
@@ -67,13 +94,15 @@ async def principal(args: argparse.Namespace) -> tuple[str, str | None]:
 
     destino = resolver_salida(args.salida, DIRECTORIO_INFORMES) if args.salida else None
 
-    runner.log(
+    registrar(
         f"Agente '{agente.nombre}' | modelo={agente.modelo} "
         f"temperature={agente.temperature} max_output_tokens={agente.max_output_tokens} "
         f"| skill={skill.nombre}"
     )
 
-    async with ClienteMCP(agente.mcp_command, agente.mcp_args, DIRECTORIO) as mcp:
+    async with ClienteMCP(
+        agente.mcp_command, agente.mcp_args, DIRECTORIO, env=entorno_del_servidor()
+    ) as mcp:
         disponibles = {h.nombre: h for h in await mcp.listar_herramientas()}
         faltantes = set(skill.herramientas) - set(disponibles)
         if faltantes:
@@ -86,7 +115,9 @@ async def principal(args: argparse.Namespace) -> tuple[str, str | None]:
             temperature=agente.temperature,
             max_output_tokens=agente.max_output_tokens,
         )
-        texto = await runner.ejecutar(agente, skill, pedido, modelo, mcp)
+        texto = await runner.ejecutar(
+            agente, skill, pedido, modelo, mcp, registrar, eventos
+        )
 
     return texto, destino
 
