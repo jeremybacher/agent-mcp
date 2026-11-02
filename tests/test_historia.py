@@ -9,10 +9,15 @@ import pytest
 
 
 def test_buscar_por_cuit_sin_datos_devuelve_none(historia_module):
-    assert historia_module.buscar_por_cuit("20000000026") is None
+    # Arrange: base vacía.
+    # Act
+    encontrada = historia_module.buscar_por_cuit("20000000026")
+    # Assert
+    assert encontrada is None
 
 
 def test_guardar_y_buscar_consulta(historia_module):
+    # Arrange
     cuit = "20000000026"
     resultado = {
         "persona": {
@@ -21,9 +26,11 @@ def test_guardar_y_buscar_consulta(historia_module):
         }
     }
 
+    # Act
     historia_module.guardar_consulta(cuit, resultado)
     encontrada = historia_module.buscar_por_cuit(cuit)
 
+    # Assert
     assert encontrada is not None
     assert encontrada["cuit"] == cuit
     assert encontrada["razon_social"] == "ACME SA"
@@ -33,6 +40,7 @@ def test_guardar_y_buscar_consulta(historia_module):
 
 
 def test_guardar_consulta_con_nombre_y_apellido(historia_module):
+    # Arrange
     cuit = "27000000035"
     resultado = {
         "persona": {
@@ -42,25 +50,31 @@ def test_guardar_consulta_con_nombre_y_apellido(historia_module):
         }
     }
 
+    # Act
     historia_module.guardar_consulta(cuit, resultado)
     encontrada = historia_module.buscar_por_cuit(cuit)
 
+    # Assert
     assert encontrada["razon_social"] == "Perez Juan"
 
 
 def test_buscar_por_cuit_devuelve_la_consulta_mas_reciente(historia_module):
+    # Arrange
     cuit = "20000000026"
     resultado_viejo = {"persona": {"razonSocial": "Vieja SA", "estadoClave": "ACTIVO"}}
     resultado_nuevo = {"persona": {"razonSocial": "Nueva SA", "estadoClave": "ACTIVO"}}
 
+    # Act
     historia_module.guardar_consulta(cuit, resultado_viejo)
     historia_module.guardar_consulta(cuit, resultado_nuevo)
-
     encontrada = historia_module.buscar_por_cuit(cuit)
+
+    # Assert
     assert encontrada["razon_social"] == "Nueva SA"
 
 
 def test_listar_ultimas(historia_module):
+    # Arrange
     historia_module.guardar_consulta(
         "20000000026", {"persona": {"razonSocial": "A", "estadoClave": "ACTIVO"}}
     )
@@ -68,19 +82,26 @@ def test_listar_ultimas(historia_module):
         "27000000035", {"persona": {"razonSocial": "B", "estadoClave": "ACTIVO"}}
     )
 
+    # Act
     consultas = historia_module.listar_ultimas(limite=10)
 
+    # Assert
     assert len(consultas) == 2
     cuits = {c["cuit"] for c in consultas}
     assert cuits == {"20000000026", "27000000035"}
 
 
 def test_buscar_por_cuit_no_mezcla_cuits_distintos(historia_module):
+    # Arrange
     historia_module.guardar_consulta(
         "20000000026", {"persona": {"razonSocial": "A", "estadoClave": "ACTIVO"}}
     )
 
-    assert historia_module.buscar_por_cuit("27000000035") is None
+    # Act
+    otra = historia_module.buscar_por_cuit("27000000035")
+
+    # Assert
+    assert otra is None
 
 
 # ---------- borrado ----------
