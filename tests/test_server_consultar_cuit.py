@@ -10,6 +10,7 @@ import wsaa
 
 
 def test_consultar_cuit_invalido_no_llama_a_arca(server_module, monkeypatch):
+    # Arrange
     login_mock_llamado = []
     consultar_mock_llamado = []
     monkeypatch.setattr(wsaa, "login", lambda *a, **k: login_mock_llamado.append(1))
@@ -17,8 +18,10 @@ def test_consultar_cuit_invalido_no_llama_a_arca(server_module, monkeypatch):
         padron, "consultar_persona", lambda *a, **k: consultar_mock_llamado.append(1)
     )
 
+    # Act
     resultado = server_module.consultar_cuit("123")
 
+    # Assert
     assert "error" in resultado
     assert login_mock_llamado == []
     assert consultar_mock_llamado == []
@@ -27,6 +30,7 @@ def test_consultar_cuit_invalido_no_llama_a_arca(server_module, monkeypatch):
 def test_consultar_cuit_valido_consulta_arca_y_guarda_en_historial(
     server_module, monkeypatch
 ):
+    # Arrange
     cuit = "20000000028"
 
     def fake_login(servicio, cert_path, key_path):
@@ -51,8 +55,10 @@ def test_consultar_cuit_valido_consulta_arca_y_guarda_en_historial(
     monkeypatch.setattr(wsaa, "login", fake_login)
     monkeypatch.setattr(padron, "consultar_persona", fake_consultar_persona)
 
+    # Act
     resultado = server_module.consultar_cuit(cuit)
 
+    # Assert
     assert resultado["persona"]["razonSocial"] == "ACME SA"
     assert resultado["persona"]["estadoClave"] == "ACTIVO"
 
@@ -65,6 +71,7 @@ def test_consultar_cuit_valido_consulta_arca_y_guarda_en_historial(
 def test_consultar_cuit_usa_historial_y_no_llama_a_arca_de_nuevo(
     server_module, monkeypatch
 ):
+    # Arrange
     cuit = "27000000030"
 
     login_llamado = []
@@ -81,14 +88,18 @@ def test_consultar_cuit_usa_historial_y_no_llama_a_arca_de_nuevo(
     monkeypatch.setattr(wsaa, "login", fake_login)
     monkeypatch.setattr(padron, "consultar_persona", fake_consultar_persona)
 
+    # Act: la primera consulta sí va a ARCA
     primer_resultado = server_module.consultar_cuit(cuit)
+
+    # Assert
     assert primer_resultado["persona"]["razonSocial"] == "Primera Consulta"
     assert len(login_llamado) == 1
     assert len(consultar_llamado) == 1
 
+    # Act: la segunda, del mismo CUIT, debería salir del historial
     segundo_resultado = server_module.consultar_cuit(cuit)
 
-    # No se volvió a llamar a WSAA ni al Padrón: vino del historial.
+    # Assert: no se volvió a llamar a WSAA ni al Padrón: vino del historial.
     assert len(login_llamado) == 1
     assert len(consultar_llamado) == 1
     assert segundo_resultado["_origen"] == "historial"
@@ -96,6 +107,7 @@ def test_consultar_cuit_usa_historial_y_no_llama_a_arca_de_nuevo(
 
 
 def test_consultar_cuit_maneja_error_de_arca(server_module, monkeypatch):
+    # Arrange
     cuit = "30000000058"
 
     def fake_login(*args, **kwargs):
@@ -103,7 +115,9 @@ def test_consultar_cuit_maneja_error_de_arca(server_module, monkeypatch):
 
     monkeypatch.setattr(wsaa, "login", fake_login)
 
+    # Act
     resultado = server_module.consultar_cuit(cuit)
 
+    # Assert
     assert "error" in resultado
     assert server_module.historia.buscar_por_cuit(cuit) is None

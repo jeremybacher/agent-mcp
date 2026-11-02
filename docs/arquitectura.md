@@ -10,16 +10,12 @@ que las revise una persona.
 
 ## Componentes
 
-```
-usuario ──► agent.py (CLI) ─┐
-usuario ──► web.py (UI) ────┴► agente.runner ──► Gemini (function calling)
-               │              │
-               │              └─► agente.mcp_cliente ──stdio──► server.py
-               │                                                  ├─ wsaa.py ──► WSAA
-               │                                                  ├─ padron.py ─► Padrón A13
-               │                                                  └─ historia.py ─► historial.db
-               └─ lee agents/*.agent.md y skills/*/SKILL.md (agente.config)
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagramas/img/arquitectura-oscuro.png">
+  <img alt="Arquitectura de ARCA Agent: la persona usa el CLI o la UI de chat, ambos llaman al agente, que consulta a Gemini y usa un servidor MCP en un subproceso para el historial SQLite y ARCA." src="diagramas/img/arquitectura-claro.png">
+</picture>
+
+Versión interactiva (zoom, ruta de cada flecha y evidencia en el código): [arquitectura.html](diagramas/arquitectura.html).
 
 | Módulo | Responsabilidad |
 |---|---|
@@ -31,6 +27,29 @@ usuario ──► web.py (UI) ────┴► agente.runner ──► Gemini 
 | `agente/entradas.py` | CSV y texto pegado acotados, y ruta de salida confinada |
 | `web.py` + `web/` | UI local de chat: lanza el agente en segundo plano (un trabajo a la vez), transmite sus eventos por Server-Sent Events, y lee y borra el historial directo de SQLite |
 | `validacion.py` | CUIT con dígito verificador y límites numéricos |
+
+## Flujos
+
+**Una pregunta en el chat.** El `POST` crea el trabajo y devuelve un id; el avance llega por un `GET` de
+Server-Sent Events aparte. El runner emite eventos de herramienta y de texto, que la UI muestra en vivo.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagramas/img/secuencia-chat-oscuro.png">
+  <img alt="Secuencia de una pregunta en el chat: el navegador crea el trabajo, abre el stream SSE, el agente consulta a Gemini y al servidor MCP, y los eventos vuelven en vivo." src="diagramas/img/secuencia-chat-claro.png">
+</picture>
+
+Interactivo: [secuencia-chat.html](diagramas/secuencia-chat.html).
+
+**Verificar CUITs.** Un CUIT con dígito verificador incorrecto se descarta antes de llegar a ARCA, pero se informa igual
+en el informe. Lo que sí pasa se revalida en el servidor, se busca primero en el historial y solo lo nuevo
+autentica en WSAA y consulta el Padrón.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagramas/img/flujo-verificacion-oscuro.png">
+  <img alt="Flujo de verificación: extracción y validación local de CUITs, pedido al agente, consultar_cuit con historial, WSAA y Padrón, e informe final." src="diagramas/img/flujo-verificacion-claro.png">
+</picture>
+
+Interactivo: [flujo-verificacion.html](diagramas/flujo-verificacion.html).
 
 ## Decisiones
 
@@ -115,6 +134,13 @@ existe en el padrón. Descartarlo localmente evita una autenticación WSAA, una
 consulta a ARCA y tokens del modelo.
 
 ## Modelo de amenazas
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="diagramas/img/seguridad-oscuro.png">
+  <img alt="Fronteras de confianza: guardas de web.py contra otras páginas, secretos acotados al proceso del agente, subproceso MCP con solo variables ARCA_*, y borrado solo desde la UI." src="diagramas/img/seguridad-claro.png">
+</picture>
+
+Interactivo: [seguridad.html](diagramas/seguridad.html).
 
 | Amenaza | Mitigación |
 |---|---|

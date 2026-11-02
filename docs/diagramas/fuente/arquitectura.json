@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ARCA Agent: arquitectura",
+    "locale": "es",
+    "output": "docs/diagramas/arquitectura.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/jeremybacher/agent-mcp.git",
+      "revision": "a681debcb2aa463538d5f782fbbd84d0193dceca"
+    }
+  },
+  "components": [
+    {
+      "id": "persona", "type": "external", "label": "Persona usuaria", "sublabel": "terminal o navegador",
+      "pos": [40, 190], "size": [150, 62]
+    },
+    {
+      "id": "cli", "type": "backend", "label": "CLI", "sublabel": "agent.py",
+      "pos": [280, 40], "size": [150, 62],
+      "sources": [{ "path": "agent.py", "line": 133, "end_line": 148, "label": "main()" }]
+    },
+    {
+      "id": "ui", "type": "frontend", "label": "UI de chat", "sublabel": "web.py + web/",
+      "pos": [280, 190], "size": [150, 62], "tag": "127.0.0.1:5051",
+      "sources": [
+        { "path": "web.py", "line": 268, "end_line": 311, "label": "crear_trabajo" },
+        { "path": "web.py", "line": 320, "end_line": 351, "label": "eventos SSE" },
+        { "path": "web/app.js", "line": 535, "end_line": 592, "label": "enviarMensaje" }
+      ]
+    },
+    {
+      "id": "agente", "type": "backend", "label": "Agente", "sublabel": "principal + runner",
+      "pos": [520, 190], "size": [150, 62],
+      "sources": [
+        { "path": "agent.py", "line": 61, "end_line": 122, "label": "principal()" },
+        { "path": "agente/runner.py", "line": 30, "end_line": 104, "label": "ejecutar()" }
+      ]
+    },
+    {
+      "id": "gemini", "type": "cloud", "label": "Gemini API", "sublabel": "streaming",
+      "pos": [520, 40], "size": [150, 62],
+      "sources": [{ "path": "agente/gemini.py", "line": 125, "end_line": 143, "label": "generate_content_stream" }]
+    },
+    {
+      "id": "config", "type": "database", "label": "Agente y skills", "sublabel": ".agent.md + SKILL.md",
+      "pos": [520, 340], "size": [150, 62],
+      "sources": [
+        { "path": "agente/config.py", "line": 120, "end_line": 135, "label": "cargar_agente" },
+        { "path": "agents/analista-proveedores.agent.md", "line": 1, "end_line": 16, "label": "frontmatter" }
+      ]
+    },
+    {
+      "id": "mcp", "type": "backend", "label": "Servidor MCP", "sublabel": "server.py · 3 tools",
+      "pos": [760, 190], "size": [150, 62],
+      "sources": [
+        { "path": "agente/mcp_cliente.py", "line": 46, "end_line": 75, "label": "ClienteMCP" },
+        { "path": "server.py", "line": 77, "end_line": 155, "label": "tools" }
+      ]
+    },
+    {
+      "id": "historia", "type": "database", "label": "Historial", "sublabel": "SQLite · historial.db",
+      "pos": [760, 340], "size": [150, 62],
+      "sources": [
+        { "path": "historia.py", "line": 19, "end_line": 36, "label": "tabla consultas" },
+        { "path": "historia.py", "line": 48, "end_line": 66, "label": "guardar_consulta" }
+      ]
+    },
+    {
+      "id": "arca", "type": "cloud", "label": "ARCA", "sublabel": "WSAA + Padrón A13",
+      "pos": [1000, 190], "size": [150, 62],
+      "sources": [
+        { "path": "wsaa.py", "line": 101, "end_line": 130, "label": "login WSAA" },
+        { "path": "padron.py", "line": 1, "end_line": 11, "label": "getPersona" }
+      ]
+    }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "Subproceso: solo variables ARCA_*", "wraps": ["mcp"] }
+  ],
+  "connections": [
+    { "id": "persona-ui", "from": "persona", "to": "ui", "label": "navegador", "variant": "emphasis" },
+    { "id": "persona-cli", "from": "persona", "to": "cli", "label": "terminal" },
+    { "id": "ui-agente", "from": "ui", "to": "agente", "label": "HTTP · SSE", "variant": "emphasis" },
+    { "id": "cli-agente", "from": "cli", "to": "agente", "label": "principal()" },
+    { "id": "agente-gemini", "from": "agente", "to": "gemini", "label": "function calling", "variant": "emphasis" },
+    { "id": "config-agente", "from": "config", "to": "agente", "label": "define el agente", "variant": "dashed" },
+    { "id": "agente-mcp", "from": "agente", "to": "mcp", "label": "stdio" },
+    { "id": "mcp-arca", "from": "mcp", "to": "arca", "label": "SOAP", "variant": "security" },
+    { "id": "mcp-historia", "from": "mcp", "to": "historia", "label": "SQL" },
+    { "id": "ui-historia", "from": "ui", "to": "historia", "label": "lee y borra", "variant": "dashed", "fromSide": "bottom", "toSide": "bottom", "via": [[355, 450], [835, 450]] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan", "title": "Dos entradas, un núcleo",
+      "items": [
+        "El CLI y la UI llaman a la misma función, agent.principal",
+        "La UI recibe el avance (texto y herramientas) por Server-Sent Events"
+      ]
+    },
+    {
+      "dot": "emerald", "title": "Declarativo",
+      "items": [
+        "El agente y sus skills viven en archivos .md con frontmatter YAML",
+        "Cambiar el modelo o la temperatura no toca código"
+      ]
+    },
+    {
+      "dot": "rose", "title": "Datos y secretos",
+      "items": [
+        "El servidor MCP corre como subproceso y solo ve variables ARCA_*",
+        "DNI y domicilio se descartan antes de responder"
+      ]
+    }
+  ]
+}

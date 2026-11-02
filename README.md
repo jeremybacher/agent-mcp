@@ -28,6 +28,25 @@ este flujo). Como `consultar_cuit` solo lee datos públicos del padrón, el
 riesgo de usar producción es bajo, pero tené presente que las consultas son
 reales.
 
+## Diagramas
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/diagramas/img/arquitectura-oscuro.png">
+  <img alt="Arquitectura de ARCA Agent" src="docs/diagramas/img/arquitectura-claro.png">
+</picture>
+
+Los diagramas están hechos con [Archify](https://github.com/tt-a1i/archify) a partir del código y fijados a un commit.
+Cada uno tiene una versión interactiva en HTML (descargá el archivo y abrilo en el navegador):
+
+| Diagrama | Qué muestra |
+|---|---|
+| [Arquitectura](docs/diagramas/arquitectura.html) | Componentes y cómo se conectan |
+| [Una pregunta en el chat](docs/diagramas/secuencia-chat.html) | Secuencia con streaming y eventos de herramientas |
+| [Verificación de CUITs](docs/diagramas/flujo-verificacion.html) | De la entrada a ARCA, con la validación local |
+| [Fronteras de confianza](docs/diagramas/seguridad.html) | Qué ve cada parte y qué se rechaza |
+
+Las imágenes, la fuente de cada diagrama y cómo regenerarlos están en [docs/diagramas](docs/diagramas/README.md); el detalle de diseño, en [docs/arquitectura.md](docs/arquitectura.md).
+
 ## Requisitos previos
 
 - Python 3.10 o superior
@@ -388,6 +407,7 @@ arca-agent/
 ├── skills/                    # Skills del agente (SKILL.md)
 ├── validacion.py                # Validación de CUIT y límites
 ├── docs/arquitectura.md           # Diseño y modelo de amenazas
+├── docs/diagramas/                # Diagramas: HTML interactivo, imágenes y fuente JSON
 ├── ejemplos/                       # CSV de ejemplo (datos ficticios)
 ├── informes/                        # Informes generados (no se versionan)
 ├── wsaa.py                # Login contra WSAA (firma CMS + token/sign, con cache)

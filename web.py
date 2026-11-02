@@ -246,11 +246,13 @@ def _armar_pedido(skill: str, datos: dict) -> tuple[str, dict | None]:
 
 @app.get("/")
 def indice():
+    """Sirve la página de la interfaz."""
     return send_from_directory(DIRECTORIO_WEB, "index.html")
 
 
 @app.get("/api/config")
 def configuracion():
+    """Parámetros del agente definidos en el `.agent.md`, para mostrarlos en los ajustes."""
     try:
         cfg = cargar_agente(agent.AGENTE_POR_DEFECTO, agent.DIRECTORIO_SKILLS)
     except ConfigError as exc:
@@ -267,6 +269,7 @@ def configuracion():
 
 @app.post("/api/trabajos")
 def crear_trabajo():
+    """Valida el pedido y lanza el agente en segundo plano (una ejecución a la vez)."""
     global _en_curso
     datos = request.get_json(silent=True)
     if not isinstance(datos, dict):
@@ -311,6 +314,7 @@ def crear_trabajo():
 
 @app.get("/api/trabajos/<id_trabajo>")
 def consultar_trabajo(id_trabajo: str):
+    """Estado de un trabajo, sin streaming (los eventos van por `/eventos`)."""
     trabajo = _trabajos.get(id_trabajo)
     if trabajo is None:
         return jsonify(error="Trabajo inexistente."), 404
@@ -353,6 +357,7 @@ def transmitir_eventos(id_trabajo: str):
 
 @app.get("/api/historial")
 def historial():
+    """Las consultas guardadas más recientes y el total."""
     return jsonify(consultas=historia.listar_ultimas(MAX_HISTORIAL), total=historia.contar())
 
 
@@ -373,6 +378,7 @@ def _borrar_sin_ejecuciones(accion):
 # debería poder borrar datos.
 @app.delete("/api/historial")
 def vaciar_historial():
+    """Borra todo el historial; exige confirmación explícita en el cuerpo."""
     datos = request.get_json(silent=True)
     if not isinstance(datos, dict) or datos.get("confirmar") is not True:
         return jsonify(error='Falta la confirmación: {"confirmar": true}.'), 400
@@ -381,6 +387,7 @@ def vaciar_historial():
 
 @app.delete("/api/historial/<cuit>")
 def borrar_del_historial(cuit: str):
+    """Borra todas las consultas guardadas de un CUIT."""
     cuit = validacion.normalizar_cuit(cuit)
     if len(cuit) != 11 or not cuit.isascii() or not cuit.isdigit():
         return jsonify(error="El CUIT debe tener 11 dígitos."), 400

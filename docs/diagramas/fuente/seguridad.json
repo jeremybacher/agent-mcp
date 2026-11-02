@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ARCA Agent: fronteras de confianza",
+    "locale": "es",
+    "output": "docs/diagramas/seguridad.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/jeremybacher/agent-mcp.git",
+      "revision": "a681debcb2aa463538d5f782fbbd84d0193dceca"
+    }
+  },
+  "components": [
+    {
+      "id": "otra", "type": "external", "label": "Otra página web", "sublabel": "CSRF · DNS rebinding",
+      "pos": [280, 40], "size": [150, 62]
+    },
+    {
+      "id": "navegador", "type": "frontend", "label": "Navegador", "sublabel": "texto, nunca HTML",
+      "pos": [280, 190], "size": [150, 62],
+      "sources": [{ "path": "web/app.js", "line": 56, "end_line": 72, "label": "api(): JSON" }]
+    },
+    {
+      "id": "guardas", "type": "security", "label": "Guardas de web.py", "sublabel": "Host · Origin · JSON · CSP",
+      "pos": [520, 190], "size": [150, 62],
+      "sources": [{ "path": "web.py", "line": 127, "end_line": 148, "label": "before/after_request" }]
+    },
+    {
+      "id": "api", "type": "backend", "label": "API de trabajos", "sublabel": "valida, un trabajo a la vez",
+      "pos": [760, 190], "size": [150, 62],
+      "sources": [{ "path": "web.py", "line": 268, "end_line": 311, "label": "crear_trabajo" }]
+    },
+    {
+      "id": "agente", "type": "backend", "label": "Agente", "sublabel": "tools que declara la skill",
+      "pos": [1000, 190], "size": [150, 62], "tag": "GEMINI_API_KEY",
+      "sources": [
+        { "path": "agent.py", "line": 38, "end_line": 44, "label": "entorno_del_servidor" },
+        { "path": "agente/runner.py", "line": 78, "end_line": 91, "label": "lista blanca" }
+      ]
+    },
+    {
+      "id": "mcp", "type": "backend", "label": "Servidor MCP", "sublabel": "sin la clave de Gemini",
+      "pos": [1240, 190], "size": [150, 62], "tag": "solo ARCA_*",
+      "sources": [
+        { "path": "server.py", "line": 17, "end_line": 28, "label": "cargar_variables_arca" },
+        { "path": "server.py", "line": 67, "end_line": 74, "label": "datos mínimos" }
+      ]
+    },
+    {
+      "id": "borrado", "type": "security", "label": "Borrado", "sublabel": "confirmar + candado + VACUUM",
+      "pos": [520, 340], "size": [150, 62],
+      "sources": [
+        { "path": "web.py", "line": 359, "end_line": 388, "label": "borrar sin ejecuciones" },
+        { "path": "historia.py", "line": 114, "end_line": 128, "label": "DELETE y VACUUM" }
+      ]
+    },
+    {
+      "id": "historia", "type": "database", "label": "Historial", "sublabel": "SQL parametrizado",
+      "pos": [1240, 340], "size": [150, 62],
+      "sources": [{ "path": "historia.py", "line": 48, "end_line": 66, "label": "INSERT con ?" }]
+    },
+    {
+      "id": "gemini", "type": "cloud", "label": "Gemini API", "sublabel": "timeout de 60 s",
+      "pos": [1000, 40], "size": [150, 62],
+      "sources": [{ "path": "agente/gemini.py", "line": 17, "end_line": 28, "label": "timeout y reintentos" }]
+    },
+    {
+      "id": "arca", "type": "cloud", "label": "ARCA", "sublabel": "WSAA + Padrón A13",
+      "pos": [1480, 190], "size": [150, 62],
+      "sources": [
+        { "path": "wsaa.py", "line": 101, "end_line": 130, "label": "login WSAA" },
+        { "path": "padron.py", "line": 7, "end_line": 11, "label": "getPersona" }
+      ]
+    }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "Tu equipo · solo 127.0.0.1", "wraps": ["navegador", "guardas", "api", "agente", "mcp", "borrado", "historia"] },
+    { "kind": "security-group", "label": "Proceso del agente", "wraps": ["guardas", "api", "agente", "borrado"] },
+    { "kind": "security-group", "label": "Subproceso MCP", "wraps": ["mcp"] }
+  ],
+  "connections": [
+    { "id": "otra-guardas", "from": "otra", "to": "guardas", "label": "403 / 415", "variant": "security" },
+    { "id": "navegador-guardas", "from": "navegador", "to": "guardas", "label": "JSON", "variant": "emphasis" },
+    { "id": "guardas-api", "from": "guardas", "to": "api", "label": "validado" },
+    { "id": "api-agente", "from": "api", "to": "agente", "label": "1 a la vez" },
+    { "id": "agente-mcp", "from": "agente", "to": "mcp", "label": "stdio" },
+    { "id": "agente-gemini", "from": "agente", "to": "gemini", "label": "HTTPS", "variant": "emphasis" },
+    { "id": "mcp-arca", "from": "mcp", "to": "arca", "label": "SOAP", "variant": "security" },
+    { "id": "mcp-historia", "from": "mcp", "to": "historia", "label": "SQL" },
+    { "id": "guardas-borrado", "from": "guardas", "to": "borrado", "label": "DELETE", "variant": "security" },
+    { "id": "borrado-historia", "from": "borrado", "to": "historia", "label": "DELETE + VACUUM", "variant": "dashed" }
+  ],
+  "cards": [
+    {
+      "dot": "rose", "title": "Entrada no confiable",
+      "items": [
+        "Se rechazan Host no local, Origin ajeno y cuerpos que no sean JSON",
+        "La CSP prohíbe scripts y estilos inline; el padrón se muestra solo como texto"
+      ]
+    },
+    {
+      "dot": "amber", "title": "Secretos acotados",
+      "items": [
+        "La clave de Gemini vive solo en el proceso del agente",
+        "El servidor MCP carga del .env únicamente variables ARCA_*"
+      ]
+    },
+    {
+      "dot": "emerald", "title": "Borrado solo humano",
+      "items": [
+        "El MCP no tiene herramienta de borrado: un modelo no puede borrar datos",
+        "Borrar exige confirmación, no corre con un trabajo en curso y compacta la base"
+      ]
+    }
+  ]
+}

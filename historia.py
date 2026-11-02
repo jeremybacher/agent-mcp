@@ -1,3 +1,9 @@
+"""Historial local de consultas al Padrón (SQLite).
+
+Todas las consultas usan parámetros (`?`) y nunca se arma SQL con datos de entrada.
+La ubicación de la base se puede cambiar con `ARCA_HISTORIAL_DB`.
+"""
+
 import json
 import os
 import sqlite3
