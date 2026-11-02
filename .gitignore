@@ -9,3 +9,8 @@ certs/*
 !certs/.gitkeep
 informes/*
 !informes/.gitkeep
+
+# Recibos de verificación de Archify (se regeneran con cada corrida)
+docs/diagramas/*.finalize*.json
+docs/diagramas/*.browser-check.json
+docs/diagramas/*.delivery.json

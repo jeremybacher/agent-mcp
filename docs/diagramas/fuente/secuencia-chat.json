@@ -1,0 +1,351 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "Una pregunta en el chat, en vivo",
+    "locale": "es",
+    "output": "docs/diagramas/secuencia-chat.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/jeremybacher/agent-mcp.git",
+      "revision": "a681debcb2aa463538d5f782fbbd84d0193dceca"
+    }
+  },
+  "participants": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Navegador",
+      "sublabel": "web/app.js",
+      "sources": [
+        {
+          "path": "web/app.js",
+          "line": 341,
+          "end_line": 397,
+          "label": "transmitir (SSE)"
+        },
+        {
+          "path": "web/app.js",
+          "line": 535,
+          "end_line": 592,
+          "label": "enviarMensaje"
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "type": "backend",
+      "label": "web.py",
+      "sublabel": "Flask + SSE",
+      "sources": [
+        {
+          "path": "web.py",
+          "line": 268,
+          "end_line": 311,
+          "label": "crear_trabajo"
+        },
+        {
+          "path": "web.py",
+          "line": 320,
+          "end_line": 351,
+          "label": "eventos SSE"
+        }
+      ]
+    },
+    {
+      "id": "agente",
+      "type": "backend",
+      "label": "Agente",
+      "sublabel": "principal + runner",
+      "sources": [
+        {
+          "path": "agent.py",
+          "line": 61,
+          "end_line": 122,
+          "label": "principal()"
+        },
+        {
+          "path": "agente/runner.py",
+          "line": 30,
+          "end_line": 104,
+          "label": "ejecutar()"
+        }
+      ]
+    },
+    {
+      "id": "gemini",
+      "type": "cloud",
+      "label": "Gemini",
+      "sublabel": "streaming",
+      "sources": [
+        {
+          "path": "agente/gemini.py",
+          "line": 125,
+          "end_line": 143,
+          "label": "generate_content_stream"
+        }
+      ]
+    },
+    {
+      "id": "mcp",
+      "type": "backend",
+      "label": "Servidor MCP",
+      "sublabel": "subproceso stdio",
+      "sources": [
+        {
+          "path": "server.py",
+          "line": 121,
+          "end_line": 135,
+          "label": "historial_consultas"
+        },
+        {
+          "path": "agente/mcp_cliente.py",
+          "line": 46,
+          "end_line": 75,
+          "label": "ClienteMCP"
+        }
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "historial.db",
+      "sources": [
+        {
+          "path": "historia.py",
+          "line": 89,
+          "end_line": 105,
+          "label": "listar_ultimas"
+        }
+      ]
+    }
+  ],
+  "segments": [
+    {
+      "from": 150,
+      "to": 245,
+      "label": "Pedido"
+    },
+    {
+      "from": 252,
+      "to": 432,
+      "label": "Pide herramienta"
+    },
+    {
+      "from": 440,
+      "to": 552,
+      "label": "Historial"
+    },
+    {
+      "from": 560,
+      "to": 706,
+      "label": "Respuesta en vivo"
+    }
+  ],
+  "messages": [
+    {
+      "id": "post-trabajo",
+      "from": "ui",
+      "to": "web",
+      "y": 172,
+      "label": "POST /api/trabajos",
+      "variant": "emphasis"
+    },
+    {
+      "id": "trabajo-creado",
+      "from": "web",
+      "to": "ui",
+      "y": 202,
+      "label": "202 + id",
+      "variant": "return"
+    },
+    {
+      "id": "abrir-sse",
+      "from": "ui",
+      "to": "web",
+      "y": 232,
+      "label": "GET /eventos (SSE)"
+    },
+    {
+      "id": "lanzar-agente",
+      "from": "web",
+      "to": "agente",
+      "y": 264,
+      "label": "principal(args, eventos)",
+      "variant": "emphasis"
+    },
+    {
+      "id": "abrir-mcp",
+      "from": "agente",
+      "to": "mcp",
+      "y": 294,
+      "label": "abre el subproceso"
+    },
+    {
+      "id": "pedido-modelo",
+      "from": "agente",
+      "to": "gemini",
+      "y": 326,
+      "label": "pedido + herramientas",
+      "variant": "emphasis"
+    },
+    {
+      "id": "pide-herramienta",
+      "from": "gemini",
+      "to": "agente",
+      "y": 356,
+      "label": "function_call",
+      "variant": "return"
+    },
+    {
+      "id": "evento-herramienta",
+      "from": "agente",
+      "to": "web",
+      "y": 392,
+      "label": "evento: herramienta",
+      "variant": "dashed"
+    },
+    {
+      "id": "sse-herramienta",
+      "from": "web",
+      "to": "ui",
+      "y": 420,
+      "label": "SSE: pastilla en curso",
+      "variant": "dashed"
+    },
+    {
+      "id": "llamar-herramienta",
+      "from": "agente",
+      "to": "mcp",
+      "y": 452,
+      "label": "historial_consultas(100)"
+    },
+    {
+      "id": "consultar-db",
+      "from": "mcp",
+      "to": "db",
+      "y": 482,
+      "label": "SELECT … LIMIT ?"
+    },
+    {
+      "id": "filas",
+      "from": "db",
+      "to": "mcp",
+      "y": 510,
+      "label": "filas",
+      "variant": "return"
+    },
+    {
+      "id": "resultado-herramienta",
+      "from": "mcp",
+      "to": "agente",
+      "y": 540,
+      "label": "consultas + cuit_formateado",
+      "variant": "return"
+    },
+    {
+      "id": "respuesta-herramienta",
+      "from": "agente",
+      "to": "gemini",
+      "y": 574,
+      "label": "function_response"
+    },
+    {
+      "id": "texto-fragmentos",
+      "from": "gemini",
+      "to": "agente",
+      "y": 604,
+      "label": "texto en fragmentos",
+      "variant": "return"
+    },
+    {
+      "id": "evento-texto",
+      "from": "agente",
+      "to": "web",
+      "y": 638,
+      "label": "eventos: texto",
+      "variant": "dashed"
+    },
+    {
+      "id": "sse-texto",
+      "from": "web",
+      "to": "ui",
+      "y": 666,
+      "label": "SSE: texto en vivo",
+      "variant": "dashed"
+    },
+    {
+      "id": "sse-fin",
+      "from": "web",
+      "to": "ui",
+      "y": 696,
+      "label": "SSE: fin + informe",
+      "variant": "return"
+    }
+  ],
+  "activations": [
+    {
+      "participant": "web",
+      "from": 166,
+      "to": 702,
+      "type": "backend"
+    },
+    {
+      "participant": "agente",
+      "from": 258,
+      "to": 644,
+      "type": "backend"
+    },
+    {
+      "participant": "gemini",
+      "from": 320,
+      "to": 362,
+      "type": "cloud"
+    },
+    {
+      "participant": "mcp",
+      "from": 446,
+      "to": 546,
+      "type": "backend"
+    },
+    {
+      "participant": "db",
+      "from": 476,
+      "to": 516,
+      "type": "database"
+    },
+    {
+      "participant": "gemini",
+      "from": 568,
+      "to": 610,
+      "type": "cloud"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Dos canales",
+      "items": [
+        "El POST crea el trabajo y devuelve un id al instante",
+        "El avance llega por un GET de SSE aparte, que se puede retomar con ?desde=N"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Eventos del runner",
+      "items": [
+        "herramienta y herramienta_fin, con argumentos y duración",
+        "texto: cada fragmento de Gemini se reenvía apenas llega"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Solo lectura",
+      "items": [
+        "La skill de preguntas solo tiene herramientas del historial",
+        "No puede consultar ARCA ni borrar datos"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,403 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Verificación de CUITs, de la entrada a ARCA",
+    "locale": "es",
+    "output": "docs/diagramas/flujo-verificacion.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/jeremybacher/agent-mcp.git",
+      "revision": "a681debcb2aa463538d5f782fbbd84d0193dceca"
+    }
+  },
+  "lanes": [
+    {
+      "id": "ui",
+      "label": "Interfaz"
+    },
+    {
+      "id": "local",
+      "label": "Validación local"
+    },
+    {
+      "id": "agente",
+      "label": "Agente y modelo"
+    },
+    {
+      "id": "mcp",
+      "label": "Servidor MCP"
+    },
+    {
+      "id": "arca",
+      "label": "ARCA"
+    }
+  ],
+  "phases": [
+    {
+      "id": "entrada",
+      "label": "Entrada y validación local",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "herramienta",
+      "label": "Historial y ARCA",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "informe",
+      "label": "Informe",
+      "fromCol": 5,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "pegar",
+    "extraer",
+    "validar",
+    "agente",
+    "consultar",
+    "historial",
+    "wsaa",
+    "padron",
+    "filtrar",
+    "resultado",
+    "informe",
+    "ver"
+  ],
+  "nodes": [
+    {
+      "id": "pegar",
+      "lane": "ui",
+      "col": 0,
+      "type": "external",
+      "label": "Pegar CUITs",
+      "sublabel": "texto o .csv / .txt",
+      "sources": [
+        {
+          "path": "web/app.js",
+          "line": 594,
+          "end_line": 597,
+          "label": "esSoloCuits"
+        }
+      ]
+    },
+    {
+      "id": "extraer",
+      "lane": "local",
+      "col": 1,
+      "type": "backend",
+      "label": "Extraer CUITs",
+      "sublabel": "sin duplicados",
+      "sources": [
+        {
+          "path": "agente/entradas.py",
+          "line": 20,
+          "end_line": 42,
+          "label": "extraer_cuits"
+        }
+      ]
+    },
+    {
+      "id": "validar",
+      "lane": "local",
+      "col": 2,
+      "type": "security",
+      "label": "Dígito verificador",
+      "sublabel": "módulo 11 + prefijo",
+      "sources": [
+        {
+          "path": "validacion.py",
+          "line": 34,
+          "end_line": 41,
+          "label": "validar_cuit"
+        }
+      ]
+    },
+    {
+      "id": "descartado",
+      "lane": "agente",
+      "col": 1,
+      "type": "security",
+      "label": "Inválidos",
+      "sublabel": "van en el pedido, sin ARCA",
+      "sources": [
+        {
+          "path": "agente/entradas.py",
+          "line": 80,
+          "end_line": 90,
+          "label": "armar_pedido_verificacion"
+        }
+      ]
+    },
+    {
+      "id": "agente",
+      "lane": "agente",
+      "col": 2,
+      "type": "backend",
+      "label": "Agente + Gemini",
+      "sublabel": "decide llamar la tool",
+      "sources": [
+        {
+          "path": "agente/runner.py",
+          "line": 57,
+          "end_line": 100,
+          "label": "bucle de herramientas"
+        }
+      ]
+    },
+    {
+      "id": "consultar",
+      "lane": "mcp",
+      "col": 2,
+      "type": "backend",
+      "label": "consultar_cuit",
+      "sublabel": "revalida el CUIT",
+      "sources": [
+        {
+          "path": "server.py",
+          "line": 77,
+          "end_line": 90,
+          "label": "consultar_cuit"
+        }
+      ]
+    },
+    {
+      "id": "historial",
+      "lane": "mcp",
+      "col": 3,
+      "type": "database",
+      "label": "¿Ya está guardado?",
+      "sublabel": "historial SQLite",
+      "sources": [
+        {
+          "path": "server.py",
+          "line": 92,
+          "end_line": 98,
+          "label": "buscar en historial"
+        }
+      ]
+    },
+    {
+      "id": "wsaa",
+      "lane": "arca",
+      "col": 3,
+      "type": "cloud",
+      "label": "WSAA",
+      "sublabel": "token + sign cacheados",
+      "sources": [
+        {
+          "path": "wsaa.py",
+          "line": 101,
+          "end_line": 130,
+          "label": "login"
+        }
+      ]
+    },
+    {
+      "id": "padron",
+      "lane": "arca",
+      "col": 4,
+      "type": "cloud",
+      "label": "Padrón A13",
+      "sublabel": "getPersona",
+      "sources": [
+        {
+          "path": "padron.py",
+          "line": 7,
+          "end_line": 11,
+          "label": "consultar_persona"
+        }
+      ]
+    },
+    {
+      "id": "filtrar",
+      "lane": "mcp",
+      "col": 4,
+      "type": "backend",
+      "label": "Filtrar y guardar",
+      "sublabel": "sin DNI ni domicilio",
+      "sources": [
+        {
+          "path": "server.py",
+          "line": 67,
+          "end_line": 74,
+          "label": "_datos_minimos"
+        },
+        {
+          "path": "server.py",
+          "line": 104,
+          "end_line": 118,
+          "label": "guardar y responder"
+        }
+      ]
+    },
+    {
+      "id": "resultado",
+      "lane": "agente",
+      "col": 4,
+      "type": "messagebus",
+      "label": "Resultado a Gemini",
+      "sublabel": "function_response",
+      "sources": [
+        {
+          "path": "agente/runner.py",
+          "line": 92,
+          "end_line": 100,
+          "label": "ResultadoHerramienta"
+        }
+      ]
+    },
+    {
+      "id": "informe",
+      "lane": "agente",
+      "col": 5,
+      "type": "backend",
+      "label": "Informe Markdown",
+      "sublabel": "tabla, alertas, resumen",
+      "sources": [
+        {
+          "path": "skills/verificar-proveedores/SKILL.md",
+          "line": 43,
+          "end_line": 62,
+          "label": "formato de salida"
+        }
+      ]
+    },
+    {
+      "id": "ver",
+      "lane": "ui",
+      "col": 5,
+      "type": "frontend",
+      "label": "Informe en el chat",
+      "sublabel": "copiar o descargar .md",
+      "sources": [
+        {
+          "path": "web/app.js",
+          "line": 535,
+          "end_line": 592,
+          "label": "enviarMensaje"
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "pegar-extraer",
+      "from": "pegar",
+      "to": "extraer"
+    },
+    {
+      "id": "extraer-validar",
+      "from": "extraer",
+      "to": "validar"
+    },
+    {
+      "id": "validar-agente",
+      "from": "validar",
+      "to": "agente",
+      "label": "válidos",
+      "variant": "emphasis"
+    },
+    {
+      "id": "validar-descartado",
+      "from": "validar",
+      "to": "descartado",
+      "label": "inválidos",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "descartado-agente",
+      "from": "descartado",
+      "to": "agente",
+      "label": "se avisa",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "agente-consultar",
+      "from": "agente",
+      "to": "consultar",
+      "label": "tool call",
+      "variant": "emphasis"
+    },
+    {
+      "id": "consultar-historial",
+      "from": "consultar",
+      "to": "historial"
+    },
+    {
+      "id": "historial-wsaa",
+      "from": "historial",
+      "to": "wsaa",
+      "label": "no",
+      "variant": "security"
+    },
+    {
+      "id": "wsaa-padron",
+      "from": "wsaa",
+      "to": "padron",
+      "label": "token"
+    },
+    {
+      "id": "padron-filtrar",
+      "from": "padron",
+      "to": "filtrar"
+    },
+    {
+      "id": "filtrar-resultado",
+      "from": "filtrar",
+      "to": "resultado"
+    },
+    {
+      "id": "historial-resultado",
+      "from": "historial",
+      "to": "resultado",
+      "label": "sí",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "resultado-informe",
+      "from": "resultado",
+      "to": "informe",
+      "variant": "emphasis"
+    },
+    {
+      "id": "informe-ver",
+      "from": "informe",
+      "to": "ver",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Primero, local",
+      "items": [
+        "Un CUIT con verificador incorrecto nunca llega a ARCA ni al modelo como consulta",
+        "Se informa igual: el informe lo marca como CUIT inválido"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Historial antes que ARCA",
+      "items": [
+        "Si el CUIT ya está guardado, la respuesta sale del historial con su fecha",
+        "Solo lo nuevo autentica en WSAA y consulta el Padrón"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Datos mínimos",
+      "items": [
+        "Se conservan nombre, estado, actividad y tipo de persona",
+        "DNI, fecha de nacimiento y domicilio se descartan antes de guardar"
+      ]
+    }
+  ]
+}
