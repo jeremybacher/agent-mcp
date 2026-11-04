@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 import threading
-import traceback
 
 from dotenv import dotenv_values
 from flask import Flask, jsonify, send_from_directory
@@ -107,8 +106,7 @@ def consultar_cuit(cuit: str) -> dict:
         resultado = {"persona": _datos_minimos(resultado.get("persona", {}))}
         log(f"consultar_cuit: consulta de {cuit} completada")
     except Exception as exc:
-        log(f"consultar_cuit: fallo consultando {cuit} -> {exc}")
-        log(traceback.format_exc())
+        log(f"consultar_cuit: fallo consultando {cuit} ({type(exc).__name__}) -> {exc}")
         return {"error": f"Fallo al consultar ARCA: {exc}"}
 
     historia.guardar_consulta(cuit, resultado)
