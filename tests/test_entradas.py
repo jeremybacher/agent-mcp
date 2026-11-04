@@ -124,6 +124,47 @@ def test_extraer_cuits_rechaza_un_numero_gigante_en_lugar_de_pasarlo_al_prompt()
         entradas.extraer_cuits(texto)
 
 
+def test_extraer_cuits_repetidos_se_devuelven_una_sola_vez_en_orden():
+    # Arrange
+    texto = f"{VALIDO} {OTRO_VALIDO} {VALIDO}, {INVALIDO}\n{INVALIDO} {OTRO_VALIDO}"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert validos == [VALIDO, OTRO_VALIDO]
+    assert invalidos == [INVALIDO]
+
+
+def test_extraer_cuits_mezcla_de_guiones_y_espacios_como_separadores():
+    # Arrange: con guiones es un solo CUIT; separado por espacios, otro token.
+    texto = "20-00000002-8   30000000066\t30-00000006-6\n 20000000029"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert validos == [VALIDO, OTRO_VALIDO]  # el tercero repite OTRO_VALIDO con guiones
+    assert invalidos == [INVALIDO]
+
+
+def test_extraer_cuits_con_espacios_internos_no_reconstruye_el_cuit():
+    # Arrange: el espacio es separador, así que "20 00000002 8" son 3 tokens.
+    texto = "20 00000002 8"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert validos == []
+    assert invalidos == ["20", "00000002", "8"]
+
+
+def test_extraer_cuits_de_10_y_12_digitos_son_invalidos_y_el_de_11_valido():
+    # Arrange
+    diez, doce = "2000000002", "200000000288"
+    texto = f"{diez} {VALIDO} {doce}"
+    # Act
+    validos, invalidos = entradas.extraer_cuits(texto)
+    # Assert
+    assert validos == [VALIDO]
+    assert invalidos == [diez, doce]
+
+
 def test_armar_pedido_incluye_los_invalidos_como_descartados():
     # Arrange
     validos, invalidos = [VALIDO], [INVALIDO]
